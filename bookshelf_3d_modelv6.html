@@ -25,6 +25,11 @@
 
   #paramsPanel { margin-top:14px; background:#fff; border:1px solid #e3e1d8; border-radius:10px; padding:14px 16px; }
   #paramsPanel h3 { margin:0 0 10px; font-size:14px; }
+  .presetBar { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:14px; }
+  .presetBar .presetLabel { font-size:12.5px; color:#6b6a63; margin-right:2px; }
+  .presetBtn { background:#fff; border:1px solid #c9c6bc; border-radius:16px; padding:6px 14px; font-size:12.5px; cursor:pointer; }
+  .presetBtn:hover { background:#f0efe8; }
+  .presetBtn.active { background:#2c2c2a; color:#fff; border-color:#2c2c2a; }
   .sliderGrid { display:grid; grid-template-columns: 1fr 1fr; gap:10px 22px; }
   @media (max-width:640px){ .sliderGrid { grid-template-columns: 1fr; } }
   .sliderRow { display:flex; flex-direction:column; gap:2px; }
@@ -109,6 +114,13 @@
 
   <div id="paramsPanel">
     <h3>Dimensions <span style="color:#888; font-weight:400;">— drag to resize, the model rebuilds live</span></h3>
+    <div class="presetBar">
+      <span class="presetLabel">Quick start:</span>
+      <button class="presetBtn active" data-preset="classic">Classic</button>
+      <button class="presetBtn" data-preset="tall">Tall &amp; narrow</button>
+      <button class="presetBtn" data-preset="wide">Wide &amp; low</button>
+      <button class="presetBtn" data-preset="display">Deep display</button>
+    </div>
     <div class="sliderGrid">
       <div class="sliderRow">
         <div class="top"><b>Overall width</b><span class="val" id="vW">700mm</span></div>
@@ -787,6 +799,27 @@
     this.classList.toggle('active', autoRotate);
   });
   document.getElementById('btnReset').addEventListener('click', function(){ radius=3300; theta=Math.PI/5; phi=Math.PI/2.5; updateCamera(); });
+
+  // ---- Design presets: one-click starting points ----
+  // Each entry just sets the seven sliders, then the existing rebuild() does the rest.
+  // Add a new object here (and a matching button in the HTML) to add another starting shape.
+  const PRESETS = {
+    classic: { sW:700,  sD:305, sH:2150, sT:18, sCH:610, sSK:100, sNS:4 },
+    tall:    { sW:550,  sD:280, sH:2400, sT:18, sCH:500, sSK:120, sNS:5 },
+    wide:    { sW:1000, sD:350, sH:1600, sT:22, sCH:700, sSK:100, sNS:2 },
+    display: { sW:800,  sD:460, sH:2000, sT:25, sCH:450, sSK:150, sNS:3 }
+  };
+  function applyPreset(key){
+    const p = PRESETS[key];
+    if(!p) return;
+    ['sW','sD','sH','sT','sCH','sSK','sNS'].forEach(id=>{ document.getElementById(id).value = p[id]; });
+    document.querySelectorAll('.presetBtn').forEach(b=> b.classList.toggle('active', b.dataset.preset===key));
+    doorsOpen = false; // start each preset with the doors closed
+    rebuild();
+  }
+  document.querySelectorAll('.presetBtn').forEach(btn=>{
+    btn.addEventListener('click', ()=> applyPreset(btn.dataset.preset));
+  });
 
   ['sW','sD','sH','sT','sCH','sSK','sNS'].forEach(id=>{
     document.getElementById(id).addEventListener('input', ()=>{
