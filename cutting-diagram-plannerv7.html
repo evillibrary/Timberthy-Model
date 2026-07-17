@@ -1,0 +1,1693 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Timberothy — Cutting Diagram Planner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --shopfloor:#1E2528;
+    --shopfloor-2:#242C2F;
+    --paper:#F6F1E4;
+    --paper-2:#EDE6D3;
+    --graphite:#2C2620;
+    --graphite-soft:#5B5347;
+    --kerf:#E8622C;
+    --tape:#F0B429;
+    --steel:#3F6B75;
+    --hatch:#C7BFAE;
+    --line:#D8CFB8;
+    --good:#4C7A4C;
+    --bad:#B4432E;
+    --good-light:#D4EDDA;
+    --bad-light:#FBEAE5;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--shopfloor);color:var(--paper);font-family:'IBM Plex Sans',sans-serif;}
+  body{
+    background-image:
+      radial-gradient(circle at 15% 10%, rgba(240,180,41,0.05), transparent 40%),
+      radial-gradient(circle at 85% 90%, rgba(63,107,117,0.10), transparent 45%);
+  }
+  .brand{
+    display:flex;align-items:baseline;gap:14px;padding:26px 34px 10px 34px;
+  }
+  .brand h1{
+    font-family:'Big Shoulders Display',sans-serif;font-weight:800;font-size:34px;
+    letter-spacing:0.5px;margin:0;color:var(--paper);text-transform:uppercase;
+  }
+  .brand .tag{
+    font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--tape);
+    border:1px solid rgba(240,180,41,0.35);padding:3px 8px;border-radius:2px;letter-spacing:0.5px;
+  }
+  .brand .sub{font-family:'IBM Plex Mono',monospace;font-size:12px;color:#8A9A9E;margin-left:auto;padding-right:4px;}
+
+  .layout{display:grid;grid-template-columns:230px 1fr;gap:0;padding:6px 34px 40px 34px;align-items:start;}
+  @media (max-width:880px){.layout{grid-template-columns:1fr;} .rail{flex-direction:row;overflow-x:auto;}}
+
+  .rail{display:flex;flex-direction:column;gap:4px;position:sticky;top:20px;padding-right:18px;}
+  .step-item{
+    display:flex;align-items:center;gap:12px;padding:12px 10px;border-radius:4px;cursor:default;
+    border-left:3px solid transparent;
+  }
+  .step-item .num{
+    font-family:'IBM Plex Mono',monospace;font-size:13px;width:26px;height:26px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;border:1.5px solid #556065;color:#8A9A9E;flex-shrink:0;
+  }
+  .step-item .label{font-size:13px;color:#8A9A9E;font-weight:500;}
+  .step-item.active{border-left-color:var(--kerf);background:rgba(232,98,44,0.08);}
+  .step-item.active .num{background:var(--kerf);border-color:var(--kerf);color:#1E2528;font-weight:700;}
+  .step-item.active .label{color:var(--paper);font-weight:600;}
+  .step-item.done{cursor:pointer;}
+  .step-item.done .num{background:var(--steel);border-color:var(--steel);color:var(--paper);}
+  .step-item.done .label{color:#C7D3D6;}
+  .rail-divider{height:1px;background:#3A4448;margin:10px 0;}
+  .jobsheet-mini{font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8A9A9E;line-height:1.6;padding:0 10px;}
+  .jobsheet-mini b{color:var(--tape);}
+  .jobsheet-entry{margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #3A4448;}
+  .mini-pdf-btn{
+    display:block;margin-top:4px;background:rgba(240,180,41,0.12);border:1px solid rgba(240,180,41,0.4);color:var(--tape);
+    font-family:'IBM Plex Mono',monospace;font-size:10.5px;padding:4px 8px;border-radius:3px;cursor:pointer;
+  }
+  .mini-pdf-btn:hover{background:rgba(240,180,41,0.22);}
+  .mini-drill-btn{
+    display:block;margin-top:4px;background:rgba(76,122,76,0.15);border:1px solid rgba(76,122,76,0.45);color:#7FB87F;
+    font-family:'IBM Plex Mono',monospace;font-size:10.5px;padding:4px 8px;border-radius:3px;cursor:pointer;
+  }
+  .mini-drill-btn:hover{background:rgba(76,122,76,0.25);}
+  .mini-drill-btn.done{background:rgba(76,122,76,0.35);color:#D4EDDA;border-color:rgba(76,122,76,0.6);}
+
+  .panel{
+    background:var(--paper);color:var(--graphite);border-radius:6px;padding:32px 36px;
+    box-shadow:0 20px 50px rgba(0,0,0,0.35);position:relative;
+    background-image:linear-gradient(0deg, transparent 24px, rgba(63,107,117,0.06) 25px);
+    background-size:100% 25px;
+  }
+  .panel::before{
+    content:'';position:absolute;top:0;left:46px;bottom:0;width:1px;background:rgba(180,67,46,0.15);
+  }
+  .panel-inner{padding-left:20px;}
+  .eyebrow{
+    font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;
+    color:var(--kerf);font-weight:600;margin-bottom:6px;
+  }
+  h2{font-family:'Big Shoulders Display',sans-serif;font-weight:700;font-size:28px;margin:0 0 4px 0;color:var(--graphite);text-transform:uppercase;letter-spacing:0.3px;}
+  .desc{color:var(--graphite-soft);font-size:14px;margin:0 0 24px 0;max-width:640px;line-height:1.5;}
+
+  .card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px;}
+  .mat-card{
+    border:1.5px solid var(--line);background:#fff;border-radius:4px;padding:16px 14px;cursor:pointer;
+    transition:border-color .15s, transform .1s;text-align:left;
+  }
+  .mat-card:hover{border-color:var(--steel);transform:translateY(-1px);}
+  .mat-card.sel{border-color:var(--kerf);background:#FFF6EF;box-shadow:0 0 0 1px var(--kerf) inset;}
+  .mat-card .swatch{width:100%;height:34px;border-radius:3px;margin-bottom:10px;border:1px solid rgba(0,0,0,0.15);}
+  .mat-card .name{font-weight:600;font-size:14px;color:var(--graphite);}
+  .mat-card .meta{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--graphite-soft);margin-top:4px;}
+  .mat-card{position:relative;}
+  .mat-card-add{border-style:dashed;display:flex;flex-direction:column;align-items:flex-start;background:var(--paper-2);}
+  .mat-card-add:hover{border-color:var(--kerf);}
+  .mat-card-add .add-plus{font-family:'Big Shoulders Display',sans-serif;font-size:26px;font-weight:800;color:var(--kerf);line-height:1;margin-bottom:8px;}
+  .mat-card-add .meta{line-height:1.4;}
+  .card-remove{
+    position:absolute;top:8px;right:8px;background:rgba(180,67,46,0.08);border:1px solid transparent;color:var(--bad);
+    border-radius:3px;width:20px;height:20px;line-height:1;cursor:pointer;font-size:12px;padding:0;
+  }
+  .card-remove:hover{background:rgba(180,67,46,0.18);}
+  .pill-x{margin-left:8px;cursor:pointer;opacity:0.75;}
+  .pill-x:hover{opacity:1;}
+  .custom-subform{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:10px;}
+  .custom-subform select,.custom-subform input[type=number]{
+    padding:8px 10px;border:1.5px solid var(--line);border-radius:3px;font-family:'IBM Plex Sans';font-size:13px;
+  }
+
+  .thick-row{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:6px;}
+  .thick-pill{
+    border:1.5px solid var(--line);background:#fff;border-radius:20px;padding:10px 18px;cursor:pointer;
+    font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:600;color:var(--graphite);
+  }
+  .thick-pill:hover{border-color:var(--steel);}
+  .thick-pill.sel{background:var(--kerf);border-color:var(--kerf);color:#fff;}
+  .stock-note{font-size:12.5px;color:var(--graphite-soft);margin-top:14px;background:var(--paper-2);border-left:3px solid var(--steel);padding:10px 14px;border-radius:2px;}
+
+  .kerf-row{display:flex;align-items:center;gap:10px;margin-top:20px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;}
+  .kerf-row input[type=number]{width:60px;padding:5px 6px;border:1.5px solid var(--line);border-radius:3px;font-family:inherit;}
+
+  .btn{
+    font-family:'IBM Plex Sans',sans-serif;font-weight:600;font-size:13.5px;border:none;border-radius:4px;
+    padding:12px 22px;cursor:pointer;letter-spacing:0.2px;
+  }
+  .btn-primary{background:var(--kerf);color:#fff;}
+  .btn-primary:hover{background:#D2531F;}
+  .btn-primary:disabled{background:#D8CFB8;color:#9A9284;cursor:not-allowed;}
+  .btn-ghost{background:transparent;color:var(--steel);border:1.5px solid var(--steel);}
+  .btn-ghost:hover{background:rgba(63,107,117,0.08);}
+  .btn-row{margin-top:26px;display:flex;gap:12px;}
+  .btn-good{background:var(--good);color:#fff;}
+  .btn-good:hover{background:#3D633D;}
+  .btn-bad{background:var(--bad);color:#fff;}
+  .btn-bad:hover{background:#8F3526;}
+
+  table.piece-table{width:100%;border-collapse:collapse;margin-top:18px;font-size:13px;}
+  table.piece-table th{
+    text-align:left;font-family:'IBM Plex Mono',monospace;font-size:10.5px;text-transform:uppercase;
+    letter-spacing:0.5px;color:var(--graphite-soft);border-bottom:1.5px solid var(--graphite);padding:6px 8px;
+  }
+  table.piece-table td{padding:8px 8px;border-bottom:1px solid var(--line);}
+  table.piece-table tr:last-child td{border-bottom:1.5px solid var(--graphite);}
+  table.piece-table tr.piece-invalid td{background:#FBEAE5;color:#7A2E1D;}
+  table.piece-table tr.piece-invalid td:first-child{font-weight:700;}
+  .del-btn{background:none;border:none;color:var(--bad);cursor:pointer;font-size:16px;line-height:1;padding:2px 6px;}
+  .del-btn:hover{opacity:0.6;}
+
+  .piece-form{display:grid;grid-template-columns:1.4fr 0.8fr 0.8fr 0.6fr 0.9fr auto;gap:10px;align-items:end;margin-top:22px;}
+  .piece-form label{display:block;font-family:'IBM Plex Mono',monospace;font-size:10.5px;text-transform:uppercase;color:var(--graphite-soft);margin-bottom:5px;}
+  .piece-form input[type=text],.piece-form input[type=number]{
+    width:100%;padding:9px 10px;border:1.5px solid var(--line);border-radius:3px;font-family:'IBM Plex Sans';font-size:13.5px;
+  }
+  .grain-check{display:flex;align-items:center;gap:6px;font-size:12px;padding-bottom:9px;}
+  @media(max-width:760px){.piece-form{grid-template-columns:1fr 1fr;}}
+
+  .empty-note{color:var(--graphite-soft);font-size:13px;font-style:italic;margin-top:16px;}
+
+  .sheet-block{margin-bottom:64px;padding-top:36px;border-top:2px dashed var(--line);}
+  .sheet-block:first-of-type{border-top:none;padding-top:0;}
+  .board-tag{display:flex;align-items:stretch;gap:0;margin-bottom:14px;border-radius:4px;overflow:hidden;box-shadow:0 3px 10px rgba(0,0,0,0.12);}
+  .board-tag .tag-num{
+    background:var(--kerf);color:#fff;font-family:'Big Shoulders Display';font-weight:800;font-size:34px;
+    display:flex;align-items:center;justify-content:center;width:64px;flex-shrink:0;
+  }
+  .board-tag .tag-info{background:var(--graphite);color:var(--paper);display:flex;flex-direction:column;justify-content:center;padding:8px 18px;flex:1;}
+  .board-tag .tag-of{font-family:'Big Shoulders Display';font-weight:700;font-size:16px;letter-spacing:0.5px;color:var(--tape);}
+  .board-tag .tag-size{font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:#D7CFBB;margin-top:2px;}
+  .board-tag.repeat{box-shadow:0 3px 14px rgba(240,180,41,0.35);}
+  .board-tag.repeat .tag-num{background:var(--tape);color:#2C2620;width:76px;font-size:22px;}
+  .board-tag.repeat .tag-info{background:#3A3018;}
+  .board-tag.repeat .tag-of{color:var(--tape);}
+  .sheet-stage{display:flex;gap:22px;flex-wrap:wrap;align-items:flex-start;}
+  .diagram-card{background:#fff;border:1px solid var(--line);border-radius:4px;padding:14px;}
+
+  .legend{display:flex;gap:18px;flex-wrap:wrap;margin:18px 0 8px 0;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--graphite-soft);}
+  .legend span{display:inline-flex;align-items:center;gap:6px;}
+  .legend i{width:12px;height:12px;display:inline-block;border-radius:2px;}
+
+  .summary-box{margin-top:26px;background:var(--paper-2);border-radius:4px;padding:18px 20px;border-left:4px solid var(--good);}
+  .summary-box.warn{border-left-color:var(--bad);}
+  .summary-box .line{display:flex;justify-content:space-between;font-size:13px;padding:4px 0;font-family:'IBM Plex Mono',monospace;}
+  .summary-box .line b{color:var(--graphite);}
+
+  .warn-box{background:#FBEAE5;border-left:4px solid var(--bad);padding:12px 16px;border-radius:3px;font-size:13px;margin-top:16px;color:#7A2E1D;}
+
+  .future{margin-top:30px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#B4A98E;border:1px dashed var(--line);display:inline-block;padding:6px 12px;border-radius:20px;}
+
+  .cycle-log{margin-top:30px;}
+  .cycle-log h3{font-family:'Big Shoulders Display';text-transform:uppercase;font-size:18px;margin:0 0 10px 0;color:var(--graphite);}
+  .cycle-row{display:flex;justify-content:space-between;font-family:'IBM Plex Mono',monospace;font-size:12px;padding:8px 0;border-bottom:1px solid var(--line);color:var(--graphite-soft);}
+  .cycle-row b{color:var(--graphite);}
+
+  /* === OFFCUT REUSE PROMPT === */
+  .offcut-prompt{background:var(--paper-2);border:2px solid var(--tape);border-radius:6px;padding:22px 24px;margin:20px 0;}
+  .offcut-prompt h3{font-family:'Big Shoulders Display';font-size:20px;margin:0 0 10px 0;color:var(--graphite);}
+  .offcut-list{font-family:'IBM Plex Mono';font-size:12px;color:var(--graphite-soft);margin:10px 0;line-height:1.8;}
+  .offcut-list b{color:var(--graphite);}
+
+  /* === DRILLING MODE === */
+  .drill-layout{display:grid;grid-template-columns:220px 1fr;gap:20px;}
+  @media(max-width:900px){.drill-layout{grid-template-columns:1fr;}}
+  .drill-piece-list{display:flex;flex-direction:column;gap:6px;max-height:520px;overflow-y:auto;padding-right:4px;}
+  .drill-piece-btn{
+    text-align:left;padding:10px 12px;border:1.5px solid var(--line);background:#fff;border-radius:4px;
+    cursor:pointer;font-size:13px;transition:border-color .15s;
+  }
+  .drill-piece-btn:hover{border-color:var(--steel);}
+  .drill-piece-btn.active{border-color:var(--kerf);background:#FFF6EF;box-shadow:0 0 0 1px var(--kerf) inset;}
+  .drill-piece-btn.done{border-color:var(--good);background:#F4FAF4;}
+  .drill-piece-btn .dim{font-family:'IBM Plex Mono';font-size:11px;color:var(--graphite-soft);}
+  .drill-piece-btn .status{font-family:'IBM Plex Mono';font-size:10px;margin-top:3px;}
+  .drill-piece-btn .status.done{color:var(--good);}
+  .drill-piece-btn .status.pending{color:var(--kerf);}
+
+  .drill-stage{background:#fff;border:1.5px solid var(--line);border-radius:4px;padding:20px;}
+  .drill-visual{position:relative;display:inline-block;}
+  .drill-visual svg{cursor:crosshair;display:block;}
+
+  .drill-controls{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;margin-top:16px;}
+  .drill-controls label{display:block;font-family:'IBM Plex Mono';font-size:10px;text-transform:uppercase;color:var(--graphite-soft);margin-bottom:5px;}
+  .drill-controls input, .drill-controls select{
+    width:100%;padding:8px 10px;border:1.5px solid var(--line);border-radius:3px;font-family:'IBM Plex Sans';font-size:13px;
+  }
+
+  .preset-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0;}
+  .preset-btn{padding:10px 8px;border:1.5px solid var(--line);background:#fff;border-radius:4px;cursor:pointer;font-size:12px;text-align:center;transition:all .15s;}
+  .preset-btn:hover{border-color:var(--steel);background:#F8F8F6;}
+  .preset-btn.active{border-color:var(--kerf);background:#FFF6EF;box-shadow:0 0 0 1px var(--kerf) inset;}
+  .preset-desc{font-size:11px;color:var(--graphite-soft);margin-top:3px;font-family:'IBM Plex Mono';}
+
+  .drill-hole-list{margin-top:14px;}
+  .drill-hole-row{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--line);font-family:'IBM Plex Mono';font-size:12px;}
+  .drill-hole-row.valid{color:var(--good);}
+  .drill-hole-row.error{color:var(--bad);background:var(--bad-light);margin:0 -10px;padding:7px 10px;border-radius:3px;}
+  .drill-hole-row .hole-coords{font-weight:600;color:var(--graphite);}
+  .drill-hole-row.error .hole-coords{color:var(--bad);}
+  .hole-rm{background:none;border:none;color:var(--bad);cursor:pointer;font-size:14px;padding:0 4px;}
+  .hole-rm:hover{opacity:0.6;}
+
+  .repeat-banner{
+    background:var(--good-light);border:1.5px solid var(--good);border-radius:4px;padding:12px 16px;margin-bottom:14px;
+    display:flex;justify-content:space-between;align-items:center;
+  }
+  .repeat-banner span{font-size:13px;color:var(--graphite);}
+  .repeat-banner b{color:var(--good);}
+
+  .safe-zone-note{
+    font-family:'IBM Plex Mono';font-size:11px;color:var(--graphite-soft);margin-top:10px;
+    background:var(--paper-2);border-left:3px solid var(--bad);padding:8px 12px;border-radius:2px;
+  }
+  .safe-zone-note.ok{border-left-color:var(--good);}
+
+  .drill-nav{display:flex;justify-content:space-between;align-items:center;margin-top:18px;padding-top:14px;border-top:1.5px solid var(--line);}
+
+  .print-only{display:none;}
+  @media print{
+    body *{visibility:hidden;}
+    #printArea, #printArea *{visibility:visible;}
+    #printArea{display:block;position:absolute;top:0;left:0;width:100%;background:#fff;color:#2C2620;}
+    .print-material{padding:14mm;}
+    .sheet-block{page-break-inside:avoid;border-top:1px dashed #B4A98E;margin-bottom:14mm;padding-top:8mm;}
+    .print-header{display:flex;justify-content:space-between;align-items:baseline;border-bottom:2px solid #2C2620;padding-bottom:6px;margin-bottom:2px;}
+    .print-brand{font-family:'Big Shoulders Display';font-weight:800;font-size:20px;letter-spacing:0.5px;}
+    .print-brand span{font-family:'IBM Plex Mono',monospace;font-weight:400;font-size:11px;text-transform:none;color:#5B5347;}
+    .print-meta{font-family:'IBM Plex Mono',monospace;font-size:11px;color:#5B5347;}
+    .diagram-card{border:1px solid #ccc;}
+    .btn, .rail, .brand{display:none !important;}
+  }
+</style>
+<base target="_blank">
+</head>
+<body>
+
+<div class="brand">
+  <h1>Timberothy</h1>
+  <div class="tag">cutting diagram planner</div>
+  <div class="sub" id="cycleCounter">CYCLE 01</div>
+</div>
+
+<div class="layout">
+  <div class="rail">
+    <div class="step-item" id="rail-1"><div class="num">1</div><div class="label">Material</div></div>
+    <div class="step-item" id="rail-2"><div class="num">2</div><div class="label">Thickness</div></div>
+    <div class="step-item" id="rail-3"><div class="num">3</div><div class="label">Pieces</div></div>
+    <div class="step-item" id="rail-4"><div class="num">4</div><div class="label">Cutting diagrams</div></div>
+    <div class="rail-divider"></div>
+    <div id="jobsheetMini" class="jobsheet-mini"></div>
+  </div>
+
+  <div class="panel"><div class="panel-inner" id="panelContent"></div></div>
+</div>
+
+<div id="printArea" class="print-only"></div>
+
+<script>
+/* ============================= DATA ============================= */
+const MATERIALS = {
+  laminated_pine: {
+    name:'Laminated Pine Board',
+    type:'sheet', color:'#E3C08E', edge:'#B98F5C', grainDefault:true,
+    stockSizes:[ {w:1800,h:305}, {w:2400,h:305}, {w:1800,h:455} ],
+    thicknesses:[ {mm:12},{mm:16},{mm:18},{mm:22},{mm:30} ]
+  },
+  plywood: {
+    name:'Plywood',
+    type:'sheet', color:'#D9BE8C', edge:'#A9834E', grainDefault:true,
+    stockSizes:[ {w:2440,h:1220} ],
+    thicknesses:[3,4,6,9,12,15,18,20].map(mm=>({mm}))
+  }
+};
+
+const THICKNESS_PRESETS = [3,4,6,9,12,16,18,19,22,25,28,30,32,35,38,45,50];
+const CUSTOM_PALETTE = ['#C9B79C','#B7C4B0','#C7A895','#A9B8C4','#D6C088','#B79CB4','#9CC0C4','#C4A9A0'];
+
+/* ============================= DRILLING RULES ============================= */
+// Structural integrity: edge distance and spacing depend on material density and integrity.
+// Chipboard / laminate is weak at edges — needs generous margin.
+// Plywood is stronger across the face but still needs care at thin edges.
+// Solid wood is strongest but splits along the grain if too close.
+const DRILL_RULES = {
+  chipboard:   { minEdgeFactor: 2.5, absoluteMin: 15, spacingFactor: 3.0, name: 'Chipboard / Laminate' },
+  laminate:    { minEdgeFactor: 2.5, absoluteMin: 15, spacingFactor: 3.0, name: 'Laminate Board' },
+  plywood:     { minEdgeFactor: 2.0, absoluteMin: 12, spacingFactor: 2.5, name: 'Plywood' },
+  mdf:         { minEdgeFactor: 2.5, absoluteMin: 15, spacingFactor: 3.0, name: 'MDF' },
+  pine:        { minEdgeFactor: 2.0, absoluteMin: 10, spacingFactor: 2.0, name: 'Softwood' },
+  hardwood:    { minEdgeFactor: 1.5, absoluteMin:  8, spacingFactor: 2.0, name: 'Hardwood' },
+  oak:         { minEdgeFactor: 1.5, absoluteMin:  8, spacingFactor: 2.0, name: 'Oak' },
+  default:     { minEdgeFactor: 2.5, absoluteMin: 15, spacingFactor: 3.0, name: 'General' }
+};
+
+function getDrillRules(materialName, holeDiameter) {
+  const name = materialName.toLowerCase();
+  let rule = DRILL_RULES.default;
+  for (const [key, val] of Object.entries(DRILL_RULES)) {
+    if (name.includes(key)) { rule = val; break; }
+  }
+  const minEdge = Math.max(holeDiameter * rule.minEdgeFactor, rule.absoluteMin);
+  const minSpacing = holeDiameter * rule.spacingFactor;
+  return { minEdge, minSpacing, ...rule };
+}
+
+/* ============================= STATE ============================= */
+let state = {
+  step:1,
+  materialKey:null,
+  thickIndex:null,
+  plankLength:null,
+  kerf:3,
+  pieces:[],
+  result:null,
+  cycles:[],
+  customMaterials:{},
+  buildingCustom:false,
+  customDraft:null,
+  // Offcut reuse
+  pendingOffcutPrompt:null, // {prevCycleIdx, prevCycleLabel, offcuts[]}
+  // Drilling mode
+  drillMode:false,
+  drillCycleIndex:null,
+  drillPieceIndex:0,
+  drillHoles:[], // {x,y,diameter,valid,errors[]} for current piece
+  drillDiameter:5,
+  drillPreset:'manual'
+};
+let pieceSeq=1;
+let customSeq=1;
+
+/* ============================= HELPERS ============================= */
+function allMaterials(){ return Object.assign({}, MATERIALS, state.customMaterials); }
+function mat(){ return allMaterials()[state.materialKey]; }
+function fmt(n){ return (Math.round(n*10)/10).toString(); }
+function el(id){ return document.getElementById(id); }
+function letterFor(i){
+  let n=i+1, s='';
+  while(n>0){ const r=(n-1)%26; s=String.fromCharCode(65+r)+s; n=Math.floor((n-1)/26); }
+  return s;
+}
+
+function goStep(n){
+  if(n>state.step && n> maxReachable()) return;
+  state.step = n;
+  state.drillMode = false;
+  render();
+}
+function maxReachable(){
+  if(!state.materialKey) return 1;
+  if(state.thickIndex===null) return 2;
+  return 4;
+}
+
+/* ============================= PACKING: SHEET GOODS (multiple stock sizes) ============================= */
+function canCut(available, needed, kerf){
+  if(needed > available + 1e-6) return false;
+  const leftover = available - needed;
+  return leftover < 1e-6 || leftover >= (kerf + 1 - 1e-6);
+}
+
+function splitAndKerf(fr, o, kerf){
+  const opt1 = {
+    right:  {x:fr.x+o.w+kerf, y:fr.y, w:fr.w-o.w-kerf, h:fr.h},
+    bottom: {x:fr.x, y:fr.y+o.h+kerf, w:o.w, h:fr.h-o.h-kerf},
+    kerfV:  {x:fr.x+o.w, y:fr.y, w:kerf, h:fr.h},
+    kerfH:  {x:fr.x, y:fr.y+o.h, w:o.w, h:kerf}
+  };
+  const opt2 = {
+    right:  {x:fr.x+o.w+kerf, y:fr.y, w:fr.w-o.w-kerf, h:o.h},
+    bottom: {x:fr.x, y:fr.y+o.h+kerf, w:fr.w, h:fr.h-o.h-kerf},
+    kerfV:  {x:fr.x+o.w, y:fr.y, w:kerf, h:o.h},
+    kerfH:  {x:fr.x, y:fr.y+o.h, w:fr.w, h:kerf}
+  };
+  const area=r=>Math.max(0,r.w)*Math.max(0,r.h);
+  return Math.max(area(opt1.right),area(opt1.bottom)) >= Math.max(area(opt2.right),area(opt2.bottom)) ? opt1 : opt2;
+}
+
+function minPieceDim(kerf){ return Math.max(kerf+1, 10); }
+
+function packMultiSize(pieceRows, stockSizes, kerf, existingSheets=null, letterOffset=0){
+  const maxLen = Math.max(...stockSizes.map(s=>s.w));
+  const maxWid = Math.max(...stockSizes.map(s=>s.h));
+  const minDim = minPieceDim(kerf);
+  const errors = [];
+  const errorLetters = [];
+  const validRows = [];
+
+  pieceRows.forEach((p,idx)=>{
+    const letter = letterFor(idx + letterOffset);
+    if(!Number.isInteger(p.length) || !Number.isInteger(p.width)){
+      errors.push(`${p.label} (${letter}) — ${p.length} × ${p.width}mm: cutting accuracy is limited to 1mm. Please use whole-number dimensions.`);
+      errorLetters.push(letter); return;
+    }
+    if(p.length<minDim || p.width<minDim){
+      errors.push(`${p.label} (${letter}) — ${p.length} × ${p.width}mm is too small to safely cut. Minimum finished size on any edge is ${minDim}mm at this ${kerf}mm kerf.`);
+      errorLetters.push(letter); return;
+    }
+    validRows.push({...p, letter});
+  });
+
+  function fitsAnyBoard(p){
+    for(const sz of stockSizes){
+      if(canCut(sz.w,p.w,kerf) && canCut(sz.h,p.h,kerf)) return true;
+      if(!p.grain && canCut(sz.w,p.h,kerf) && canCut(sz.h,p.w,kerf)) return true;
+    }
+    return false;
+  }
+  function buildFitError(p){
+    const tooLong = p.w>maxLen;
+    const tooWide = p.h>maxWid;
+    const reasons=[];
+    let kind, advice;
+    if(tooWide) reasons.push(`${p.h}mm is wider than the widest available board (${maxWid}mm)`);
+    if(tooLong) reasons.push(`${p.w}mm is longer than the longest available board (${maxLen}mm)`);
+    if(tooWide && tooLong){
+      kind = 'too big';
+      advice = 'Consider joining boards both ways — likely worth sourcing a custom panel instead.';
+    } else if(tooWide){
+      kind = 'too wide';
+      advice = 'Consider edge-gluing two boards together for the extra width.';
+    } else if(tooLong){
+      kind = 'too long';
+      advice = 'Consider joining two boards end-to-end (a scarf or finger joint) for the extra length.';
+    } else {
+      kind = "not safely cuttable";
+      reasons.push(`no available board leaves enough clearance for the ${kerf}mm saw blade once it's cut down${p.grain?' with the grain running the right way':''}`);
+      advice = 'Consider joining two boards, or check whether the grain lock can be relaxed to allow a rotation.';
+    }
+    return `${p.label} (${p.letter}) is ${kind} — ${p.w} × ${p.h}mm can't be cut from this material. ${reasons.join('; ')}. ${advice}`;
+  }
+
+  const expanded = [];
+  validRows.forEach(p=>{ for(let i=0;i<p.qty;i++) expanded.push({w:p.length,h:p.width,label:p.label,grain:p.grain,letter:p.letter}); });
+  expanded.sort((a,b)=> (b.w*b.h)-(a.w*a.h));
+
+  const sheets = [];
+  const failedLetters = new Set();
+
+  // If existing sheets provided, seed them (for offcut reuse across job sheets)
+  if(existingSheets && existingSheets.length){
+    existingSheets.forEach(es=>{
+      sheets.push({
+        size: es.size,
+        freeRects: es.freeRects.map(fr=>({...fr})),
+        placed: es.placed.slice(),
+        kerfRects: es.kerfRects.slice(),
+        _order: es._order || 0
+      });
+    });
+  }
+
+  for(const p of expanded){
+    if(!fitsAnyBoard(p)){
+      if(!failedLetters.has(p.letter)){ errors.push(buildFitError(p)); errorLetters.push(p.letter); failedLetters.add(p.letter); }
+      continue;
+    }
+    let best=null;
+    for(const sheet of sheets){
+      for(const fr of sheet.freeRects){
+        const opts=[];
+        if(canCut(fr.w,p.w,kerf) && canCut(fr.h,p.h,kerf)) opts.push({w:p.w,h:p.h,rot:false});
+        if(!p.grain && canCut(fr.w,p.h,kerf) && canCut(fr.h,p.w,kerf)) opts.push({w:p.h,h:p.w,rot:true});
+        for(const o of opts){
+          const leftover = fr.w*fr.h - o.w*o.h;
+          if(!best || leftover<best.leftover) best={sheet,fr,o,leftover};
+        }
+      }
+    }
+    if(!best){
+      let chosen=null, chosenArea=Infinity;
+      for(const sz of stockSizes){
+        const normalOk = canCut(sz.w,p.w,kerf) && canCut(sz.h,p.h,kerf);
+        const rotOk = !p.grain && canCut(sz.w,p.h,kerf) && canCut(sz.h,p.w,kerf);
+        if((normalOk||rotOk) && sz.w*sz.h<chosenArea){ chosen=sz; chosenArea=sz.w*sz.h; }
+      }
+      const sheet = {size:chosen, freeRects:[{x:0,y:0,w:chosen.w,h:chosen.h}], placed:[], kerfRects:[], _order:0};
+      sheets.push(sheet);
+      const fitsNormal = canCut(chosen.w,p.w,kerf) && canCut(chosen.h,p.h,kerf);
+      const o = fitsNormal ? {w:p.w,h:p.h,rot:false} : {w:p.h,h:p.w,rot:true};
+      best = {sheet, fr:sheet.freeRects[0], o, leftover: chosen.w*chosen.h - o.w*o.h};
+    }
+    const {sheet,fr,o} = best;
+    sheet.placed.push({x:fr.x,y:fr.y,w:o.w,h:o.h,label:p.label,letter:p.letter,rot:o.rot,origW:p.w,origH:p.h,order:sheet._order++});
+    sheet.freeRects = sheet.freeRects.filter(r=>r!==fr);
+    const sp = splitAndKerf(fr, o, kerf);
+    if(o.w<fr.w) sheet.kerfRects.push(sp.kerfV);
+    if(o.h<fr.h) sheet.kerfRects.push(sp.kerfH);
+    if(sp.right.w>1 && sp.right.h>1) sheet.freeRects.push(sp.right);
+    if(sp.bottom.w>1 && sp.bottom.h>1) sheet.freeRects.push(sp.bottom);
+  }
+  return {sheets, errors, errorLetters};
+}
+
+/* ============================= PACKING: PLANK (1D) ============================= */
+function packPlanks(pieces, stockLength, kerf){
+  const expanded=[];
+  pieces.forEach(p=>{ for(let i=0;i<p.qty;i++) expanded.push({len:p.length,label:p.label,width:p.width}); });
+  expanded.sort((a,b)=>b.len-a.len);
+  let boards=[]; let order=0; let errors=[];
+  for(const p of expanded){
+    if(p.len>stockLength){ errors.push(p.label+' ('+p.len+'mm) is longer than the '+stockLength+'mm stock length selected.'); continue; }
+    let best=null;
+    for(const b of boards){
+      const remaining = stockLength - b.used - (b.segments.length?kerf:0);
+      if(p.len<=remaining){
+        const leftover = remaining - p.len;
+        if(!best || leftover<best.leftover) best={board:b,leftover};
+      }
+    }
+    if(!best){
+      const b={segments:[],used:0}; boards.push(b); best={board:b,leftover:stockLength-p.len};
+    }
+    const b=best.board;
+    const startX = b.used + (b.segments.length?kerf:0);
+    b.segments.push({x:startX,len:p.len,label:p.label,order:order++});
+    b.used = startX + p.len;
+  }
+  return {boards, errors};
+}
+
+/* ============================= SVG RENDERING ============================= */
+function svgOpen(vbW,vbH,pxW,pxH){
+  return `<svg viewBox="0 0 ${vbW} ${vbH}" width="${pxW}" height="${pxH}" xmlns="http://www.w3.org/2000/svg">`;
+}
+function renderSheetSVG(sheet, sheetW, sheetH, matColor, matEdge, kerf, idx){
+  const pxW=560, pxH= Math.round(pxW*sheetH/sheetW);
+  const fs = sheetW*0.017;
+  let s = svgOpen(sheetW,sheetH,pxW,pxH);
+  // Two hatch patterns: green for usable offcut, beige for scrap
+  s += `<defs>
+    <pattern id="hatchGood${idx}" patternUnits="userSpaceOnUse" width="${sheetW*0.028}" height="${sheetW*0.028}" patternTransform="rotate(45)">
+      <line x1="0" y1="0" x2="0" y2="${sheetW*0.028}" stroke="#4C7A4C" stroke-width="${sheetW*0.006}"/>
+    </pattern>
+    <pattern id="hatchScrap${idx}" patternUnits="userSpaceOnUse" width="${sheetW*0.028}" height="${sheetW*0.028}" patternTransform="rotate(45)">
+      <line x1="0" y1="0" x2="0" y2="${sheetW*0.028}" stroke="#C7BFAE" stroke-width="${sheetW*0.006}"/>
+    </pattern>
+  </defs>`;
+  s += `<rect x="0" y="0" width="${sheetW}" height="${sheetH}" fill="${matColor}" stroke="${matEdge}" stroke-width="${sheetW*0.003}"/>`;
+  // free rects (offcuts)
+  sheet.freeRects.forEach(fr=>{
+    const usable = fr.w>=150 && fr.h>=150;
+    const fill = usable ? `url(#hatchGood${idx})` : `url(#hatchScrap${idx})`;
+    const stroke = usable ? '#4C7A4C' : '#B4A98E';
+    s += `<rect x="${fr.x}" y="${fr.y}" width="${fr.w}" height="${fr.h}" fill="${fill}" stroke="${stroke}" stroke-width="${sheetW*0.0015}" stroke-dasharray="${sheetW*0.006},${sheetW*0.006}"/>`;
+    if(usable){
+      s += textEl(fr.x+fr.w/2, fr.y+fr.h/2, `OFFCUT`, fs*0.85, '#2C5A2C', true);
+      s += textEl(fr.x+fr.w/2, fr.y+fr.h/2+fs*1.0, `${Math.round(fr.w)} × ${Math.round(fr.h)}`, fs*0.75, '#2C5A2C', true);
+    }
+  });
+  // kerf strips
+  sheet.kerfRects.forEach(k=>{
+    s += `<rect x="${k.x}" y="${k.y}" width="${k.w}" height="${k.h}" fill="#E8622C"/>`;
+  });
+  // placed pieces
+  sheet.placed.forEach(p=>{
+    s += `<rect x="${p.x}" y="${p.y}" width="${p.w}" height="${p.h}" fill="#ffffff" stroke="#2C2620" stroke-width="${sheetW*0.0022}"/>`;
+    const cx=p.x+p.w/2, cy=p.y+p.h/2;
+    const vertical = p.w < p.h*0.6;
+    if(vertical){
+      s += textEl(cx - fs*0.62, cy, `${p.label} - ${p.letter}`, fs, '#2C2620', true, true);
+      s += textEl(cx + fs*0.62, cy, `${Math.round(p.origW)} × ${Math.round(p.origH)}${p.rot?' (rotated 90°)':''}`, fs*0.82, '#5B5347', true, true);
+    } else {
+      s += textEl(cx,cy - fs*0.5, `${p.label} - ${p.letter}`, fs, '#2C2620', true, false);
+      s += textEl(cx,cy + fs*0.7, `${Math.round(p.origW)} × ${Math.round(p.origH)}${p.rot?' (rotated 90°)':''}`, fs*0.82, '#5B5347', true, false);
+    }
+    // order badge
+    const br = sheetW*0.017;
+    s += `<circle cx="${p.x+br*1.4}" cy="${p.y+br*1.4}" r="${br}" fill="#F0B429" stroke="#2C2620" stroke-width="${sheetW*0.0015}"/>`;
+    s += textEl(p.x+br*1.4, p.y+br*1.4+fs*0.32, (p.order+1).toString(), fs*0.85, '#2C2620', true);
+  });
+  s += `</svg>`;
+  return s;
+}
+function textEl(x,y,txt,fs,color,anchorMid,vertical){
+  const transform = vertical? ` transform="rotate(-90 ${x} ${y})"`:'';
+  return `<text x="${x}" y="${y}" font-family="IBM Plex Mono, monospace" font-size="${fs}" fill="${color}" text-anchor="${anchorMid?'middle':'start'}" ${transform}>${escapeXml(txt)}</text>`;
+}
+function escapeXml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function renderIsoThumb(sheetW,sheetH,thicknessMm,color,edge){
+  const pxW=160,pxH=140;
+  const scale = 120/Math.max(sheetW,sheetH);
+  const w=sheetW*scale, h=sheetH*scale*0.55;
+  const skx=18, sky=10;
+  const thickPx = Math.max(6, Math.min(26, thicknessMm*0.9));
+  const ox=18, oy=70;
+  let s = svgOpen(pxW,pxH,pxW,pxH);
+  s += `<polygon points="${ox},${oy+h} ${ox+w},${oy+h} ${ox+w},${oy+h+thickPx} ${ox},${oy+h+thickPx}" fill="${shade(edge,-18)}" stroke="#2C2620" stroke-width="0.6"/>`;
+  s += `<polygon points="${ox+w},${oy+h} ${ox+w+skx},${oy+h-sky} ${ox+w+skx},${oy+h-sky+thickPx} ${ox+w},${oy+h+thickPx}" fill="${shade(edge,-32)}" stroke="#2C2620" stroke-width="0.6"/>`;
+  s += `<polygon points="${ox},${oy+h} ${ox+skx},${oy+h-sky} ${ox+w+skx},${oy+h-sky} ${ox+w},${oy+h}" fill="${color}" stroke="#2C2620" stroke-width="0.6"/>`;
+  s += `</svg>`;
+  return s;
+}
+function shade(hex, amt){
+  const c = hex.replace('#','');
+  const num = parseInt(c,16);
+  let r=(num>>16)+amt, g=((num>>8)&0xff)+amt, b=(num&0xff)+amt;
+  r=Math.max(0,Math.min(255,r));g=Math.max(0,Math.min(255,g));b=Math.max(0,Math.min(255,b));
+  return '#'+((1<<24)+(r<<16)+(g<<8)+b).toString(16).slice(1);
+}
+
+function renderPlankSVG(board, stockLength, profileWidth, matColor, matEdge, idx){
+  const pxW=620, pxH=90;
+  const dispH = Math.max(40,Math.min(90,profileWidth*0.5));
+  const fs = stockLength*0.018;
+  let s = svgOpen(stockLength, dispH+30, pxW, pxH);
+  s += `<rect x="0" y="10" width="${stockLength}" height="${dispH}" fill="${matColor}" stroke="${matEdge}" stroke-width="${stockLength*0.002}"/>`;
+  board.segments.forEach((seg,i)=>{
+    s += `<rect x="${seg.x}" y="10" width="${seg.len}" height="${dispH}" fill="#ffffff" stroke="#2C2620" stroke-width="${stockLength*0.0025}"/>`;
+    s += textEl(seg.x+seg.len/2, 10+dispH/2-fs*0.5, seg.label, fs*0.9, '#2C2620', true);
+    s += textEl(seg.x+seg.len/2, 10+dispH/2+fs*0.8, seg.len+'mm', fs*0.75, '#5B5347', true);
+    const br = stockLength*0.014;
+    s += `<circle cx="${seg.x+br*1.3}" cy="${10+br*1.3}" r="${br}" fill="#F0B429" stroke="#2C2620" stroke-width="${stockLength*0.0015}"/>`;
+    s += textEl(seg.x+br*1.3, 10+br*1.3+fs*0.28, (seg.order+1).toString(), fs*0.75, '#2C2620', true);
+  });
+  for(let i=0;i<board.segments.length;i++){
+    const seg=board.segments[i];
+    const kx = seg.x+seg.len;
+    const hasNext = i<board.segments.length-1;
+    const kEnd = hasNext? board.segments[i+1].x : stockLength;
+    if(kEnd>kx){
+      const isOffcut = !hasNext;
+      s += `<rect x="${kx}" y="10" width="${kEnd-kx}" height="${dispH}" fill="${isOffcut? '#DCD5C4':'#E8622C'}" stroke="${isOffcut?'#B4A98E':'none'}" stroke-dasharray="${isOffcut?stockLength*0.004+','+stockLength*0.004:'none'}"/>`;
+      if(isOffcut && (kEnd-kx)>=150){
+        s += textEl(kx+(kEnd-kx)/2, 10+dispH/2, 'OFFCUT', fs*0.75,'#5B5347',true);
+        s += textEl(kx+(kEnd-kx)/2, 10+dispH/2+fs*0.9, Math.round(kEnd-kx)+'mm', fs*0.65,'#5B5347',true);
+      }
+    }
+  }
+  s += `</svg>`;
+  return s;
+}
+
+/* ============================= COMPUTE ============================= */
+function computeResult(){
+  if(!state.materialKey || state.thickIndex===null || state.pieces.length===0){
+    state.result = null;
+    return;
+  }
+  const m = mat();
+  if(m.type==='sheet'){
+    const th = m.thicknesses[state.thickIndex];
+    const {sheets, errors, errorLetters} = packMultiSize(state.pieces, m.stockSizes, state.kerf);
+    let totalArea=0, usedArea=0;
+    const sizeCounts = {};
+    sheets.forEach(sh=>{
+      totalArea += sh.size.w*sh.size.h;
+      sh.placed.forEach(p=>usedArea+=p.w*p.h);
+      const key = sh.size.h+' × '+sh.size.w+'mm';
+      sizeCounts[key] = (sizeCounts[key]||0)+1;
+    });
+    state.result = {type:'sheet', sheets, errors, errorLetters, th, sizeCounts, wastePct: totalArea? (100*(1-usedArea/totalArea)):0};
+  } else {
+    const prof = m.profiles[state.thickIndex];
+    const stockLen = state.plankLength;
+    const {boards, errors} = packPlanks(state.pieces, stockLen, state.kerf);
+    let totalLen=0, usedLen=0;
+    boards.forEach(b=>{ totalLen+=stockLen; usedLen+=b.used; });
+    state.result = {type:'plank', boards, errors, prof, stockLen, wastePct: totalLen? (100*(1-usedLen/totalLen)):0};
+  }
+}
+
+/* ============================= OFFCUT REUSE ============================= */
+function findPreviousCycleWithOffcuts(){
+  if(!state.result || state.result.type!=='sheet') return -1;
+  const m = mat();
+  const th = m.thicknesses[state.thickIndex];
+  // Search backwards for same material + thickness with usable offcuts
+  for(let i=state.cycles.length-1;i>=0;i--){
+    const c = state.cycles[i];
+    if(c.result.type!=='sheet') continue;
+    if(c.materialMeta.name !== m.name) continue;
+    if(c.result.th.mm !== th.mm) continue;
+    // Check if any sheet has usable free rects
+    const hasUsable = c.result.sheets.some(sh=>sh.freeRects.some(fr=>fr.w>=150 && fr.h>=150));
+    if(hasUsable) return i;
+  }
+  return -1;
+}
+
+function getOffcutSummary(cycleIdx){
+  const c = state.cycles[cycleIdx];
+  const offcuts = [];
+  c.result.sheets.forEach((sh,si)=>{
+    sh.freeRects.forEach(fr=>{
+      if(fr.w>=150 && fr.h>=150) offcuts.push({sheet:si+1, w:Math.round(fr.w), h:Math.round(fr.h)});
+    });
+  });
+  return offcuts;
+}
+
+function promptOffcutReuse(){
+  const prevIdx = findPreviousCycleWithOffcuts();
+  if(prevIdx===-1){
+    confirmCycleNormal();
+    return;
+  }
+  const offcuts = getOffcutSummary(prevIdx);
+  state.pendingOffcutPrompt = {prevCycleIdx:prevIdx, offcuts};
+  render();
+}
+
+function confirmCycleNormal(){
+  const m = mat();
+  let label, count;
+  if(state.result.type==='sheet'){
+    label = m.name+' — '+state.result.th.mm+'mm';
+    count = state.result.sheets.length;
+  } else {
+    label = m.name+' — '+state.result.prof.mm+'mm × '+state.result.prof.width+'mm, '+state.result.stockLen+'mm lengths';
+    count = state.result.boards.length;
+  }
+  state.cycles.push({
+    label, count, wastePct: state.result.wastePct, unit: state.result.type==='sheet'?'sheet(s)':'board(s)',
+    materialMeta: {name:m.name, color:m.color, edge:m.edge},
+    result: state.result,
+    pieceRows: state.pieces.slice(),
+    kerf: state.kerf,
+    date: new Date().toLocaleDateString(),
+    drillData: {}
+  });
+  // reset
+  state.materialKey=null; state.thickIndex=null; state.plankLength=null; state.pieces=[]; state.result=null; state.step=1;
+  state.pendingOffcutPrompt=null;
+  render();
+}
+
+function mergeWithPreviousCycle(prevIdx){
+  const prev = state.cycles[prevIdx];
+  const m = mat();
+  const th = m.thicknesses[state.thickIndex];
+  const letterOffset = prev.pieceRows.length;
+  // Pack new pieces into existing sheets
+  const {sheets, errors, errorLetters} = packMultiSize(state.pieces, m.stockSizes, state.kerf, prev.result.sheets, letterOffset);
+  // Recalculate stats
+  let totalArea=0, usedArea=0;
+  const sizeCounts = {};
+  sheets.forEach(sh=>{
+    totalArea += sh.size.w*sh.size.h;
+    sh.placed.forEach(p=>usedArea+=p.w*p.h);
+    const key = sh.size.h+' × '+sh.size.w+'mm';
+    sizeCounts[key] = (sizeCounts[key]||0)+1;
+  });
+  // Update previous cycle
+  prev.result = {type:'sheet', sheets, errors, errorLetters, th, sizeCounts, wastePct: totalArea? (100*(1-usedArea/totalArea)):0};
+  prev.pieceRows = prev.pieceRows.concat(state.pieces.map(p=>({...p})));
+  prev.count = sheets.length;
+  prev.wastePct = prev.result.wastePct;
+  prev.label += ' + continued';
+  // Reset current state
+  state.materialKey=null; state.thickIndex=null; state.plankLength=null; state.pieces=[]; state.result=null; state.step=1;
+  state.pendingOffcutPrompt=null;
+  render();
+}
+
+/* ============================= DRILLING MODE ============================= */
+function enterDrilling(cycleIndex){
+  state.drillMode = true;
+  state.drillCycleIndex = cycleIndex;
+  state.drillPieceIndex = 0;
+  state.drillPreset = 'manual';
+  loadDrillPiece();
+  render();
+}
+function exitDrilling(){
+  saveDrillPiece();
+  state.drillMode = false;
+  state.drillCycleIndex = null;
+  state.drillPieceIndex = 0;
+  state.drillHoles = [];
+  render();
+}
+function loadDrillPiece(){
+  const cycle = state.cycles[state.drillCycleIndex];
+  const piece = cycle.pieceRows[state.drillPieceIndex];
+  const saved = cycle.drillData ? cycle.drillData[piece.id] : null;
+  state.drillHoles = saved ? saved.holes.map(h=>({...h})) : [];
+  state.drillDiameter = saved ? saved.diameter : 5;
+}
+function saveDrillPiece(){
+  const cycle = state.cycles[state.drillCycleIndex];
+  const piece = cycle.pieceRows[state.drillPieceIndex];
+  if(!cycle.drillData) cycle.drillData = {};
+  cycle.drillData[piece.id] = {
+    holes: state.drillHoles.map(h=>({...h})),
+    diameter: state.drillDiameter
+  };
+}
+function drillSelectPiece(idx){
+  saveDrillPiece();
+  state.drillPieceIndex = idx;
+  loadDrillPiece();
+  render();
+}
+function drillNext(){
+  const cycle = state.cycles[state.drillCycleIndex];
+  if(state.drillPieceIndex < cycle.pieceRows.length-1){
+    drillSelectPiece(state.drillPieceIndex+1);
+  }
+}
+function drillPrev(){
+  if(state.drillPieceIndex > 0){
+    drillSelectPiece(state.drillPieceIndex-1);
+  }
+}
+
+function findRepeatablePattern(){
+  const cycle = state.cycles[state.drillCycleIndex];
+  const current = cycle.pieceRows[state.drillPieceIndex];
+  for(let i=state.drillPieceIndex-1;i>=0;i--){
+    const p = cycle.pieceRows[i];
+    if(p.length===current.length && p.width===current.width && cycle.drillData && cycle.drillData[p.id]){
+      return {piece:p, data:cycle.drillData[p.id]};
+    }
+  }
+  return null;
+}
+function repeatPattern(){
+  const rep = findRepeatablePattern();
+  if(!rep) return;
+  state.drillHoles = rep.data.holes.map(h=>({...h}));
+  state.drillDiameter = rep.data.diameter;
+  validateCurrentHoles();
+  render();
+}
+
+function validateCurrentHoles(){
+  const cycle = state.cycles[state.drillCycleIndex];
+  const piece = cycle.pieceRows[state.drillPieceIndex];
+  const rules = getDrillRules(cycle.materialMeta.name, state.drillDiameter);
+  state.drillHoles = state.drillHoles.map(h=>{
+    const errors = [];
+    if(h.x < rules.minEdge) errors.push(`Too close to left edge — need ${rules.minEdge.toFixed(1)}mm, have ${h.x.toFixed(1)}mm`);
+    if(h.y < rules.minEdge) errors.push(`Too close to top edge — need ${rules.minEdge.toFixed(1)}mm, have ${h.y.toFixed(1)}mm`);
+    if(piece.length - h.x < rules.minEdge) errors.push(`Too close to right edge — need ${rules.minEdge.toFixed(1)}mm, have ${(piece.length-h.x).toFixed(1)}mm`);
+    if(piece.width - h.y < rules.minEdge) errors.push(`Too close to bottom edge — need ${rules.minEdge.toFixed(1)}mm, have ${(piece.width-h.y).toFixed(1)}mm`);
+    for(const other of state.drillHoles){
+      if(other===h) continue;
+      const dist = Math.hypot(h.x-other.x, h.y-other.y);
+      if(dist < rules.minSpacing) errors.push(`Too close to another hole — need ${rules.minSpacing.toFixed(1)}mm centre-to-centre, have ${dist.toFixed(1)}mm`);
+    }
+    return {...h, valid: errors.length===0, errors};
+  });
+}
+
+function addDrillHole(x,y){
+  const hole = {x, y, diameter: state.drillDiameter, valid:true, errors:[]};
+  state.drillHoles.push(hole);
+  validateCurrentHoles();
+  render();
+}
+function removeDrillHole(i){
+  state.drillHoles.splice(i,1);
+  validateCurrentHoles();
+  render();
+}
+function clearDrillHoles(){
+  state.drillHoles = [];
+  render();
+}
+function setDrillDiameter(d){
+  state.drillDiameter = Math.max(1, d);
+  validateCurrentHoles();
+  render();
+}
+
+/* === Presets === */
+function applyPreset(name){
+  state.drillPreset = name;
+  const cycle = state.cycles[state.drillCycleIndex];
+  const piece = cycle.pieceRows[state.drillPieceIndex];
+  const rules = getDrillRules(cycle.materialMeta.name, state.drillDiameter);
+  const w = piece.length, h = piece.width;
+  const d = state.drillDiameter;
+  let holes = [];
+
+  switch(name){
+    case 'centre':
+      holes.push({x:w/2, y:h/2, diameter:d, valid:true, errors:[]});
+      break;
+    case 'corners':
+      holes.push({x:rules.minEdge, y:rules.minEdge, diameter:d, valid:true, errors:[]});
+      holes.push({x:w-rules.minEdge, y:rules.minEdge, diameter:d, valid:true, errors:[]});
+      holes.push({x:rules.minEdge, y:h-rules.minEdge, diameter:d, valid:true, errors:[]});
+      holes.push({x:w-rules.minEdge, y:h-rules.minEdge, diameter:d, valid:true, errors:[]});
+      break;
+    case 'even_h':{
+      const n = parseInt(el('presetCount').value)||3;
+      const spacing = parseFloat(el('presetSpacing').value)||32;
+      const startX = (w - (n-1)*spacing)/2;
+      for(let i=0;i<n;i++) holes.push({x:startX+i*spacing, y:h/2, diameter:d, valid:true, errors:[]});
+      break;
+    }
+    case 'even_v':{
+      const n = parseInt(el('presetCount').value)||3;
+      const spacing = parseFloat(el('presetSpacing').value)||32;
+      const startY = (h - (n-1)*spacing)/2;
+      for(let i=0;i<n;i++) holes.push({x:w/2, y:startY+i*spacing, diameter:d, valid:true, errors:[]});
+      break;
+    }
+    case 'grid':{
+      const cols = parseInt(el('presetCols').value)||2;
+      const rows = parseInt(el('presetRows').value)||2;
+      const sx = parseFloat(el('presetSpacingX').value)||32;
+      const sy = parseFloat(el('presetSpacingY').value)||32;
+      const startX = (w - (cols-1)*sx)/2;
+      const startY = (h - (rows-1)*sy)/2;
+      for(let r=0;r<rows;r++){
+        for(let c=0;c<cols;c++){
+          holes.push({x:startX+c*sx, y:startY+r*sy, diameter:d, valid:true, errors:[]});
+        }
+      }
+      break;
+    }
+    case 'manual':
+      return; // nothing to apply
+  }
+  state.drillHoles = holes;
+  validateCurrentHoles();
+  render();
+}
+
+/* ============================= PRINT / PDF EXPORT ============================= */
+function printHeader(c){
+  return `
+    <div class="print-header">
+      <div class="print-brand">TIMBEROTHY <span>— cutting job sheet</span></div>
+      <div class="print-meta">${c.date || new Date().toLocaleDateString()}</div>
+    </div>
+    <h2 style="margin-top:6px;">${c.materialMeta.name}${c.result.th? ' — '+c.result.th.mm+'mm':''}</h2>
+  `;
+}
+function printCycle(idx){
+  const c = state.cycles[idx];
+  el('printArea').innerHTML = `<div class="print-material">${printHeader(c)}${diagramBodyHTML(c.materialMeta, c.result, c.pieceRows, c.kerf)}${drillPrintHTML(c)}</div>`;
+  window.print();
+}
+function printAllCycles(){
+  el('printArea').innerHTML = state.cycles.map((c,i)=>
+    `<div class="print-material" style="${i>0?'page-break-before:always;':''}">${printHeader(c)}${diagramBodyHTML(c.materialMeta, c.result, c.pieceRows, c.kerf)}${drillPrintHTML(c)}</div>`
+  ).join('');
+  window.print();
+}
+function printCurrent(){
+  const m = mat();
+  const c = {materialMeta:{name:m.name,color:m.color,edge:m.edge}, result:state.result, pieceRows:state.pieces, kerf:state.kerf, date:new Date().toLocaleDateString()};
+  el('printArea').innerHTML = `<div class="print-material">${printHeader(c)}${diagramBodyHTML(c.materialMeta, c.result, c.pieceRows, c.kerf)}</div>`;
+  window.print();
+}
+
+function drillPrintHTML(cycle){
+  if(!cycle.drillData) return '';
+  const piecesWithHoles = cycle.pieceRows.filter(p=>cycle.drillData[p.id] && cycle.drillData[p.id].holes.length>0);
+  if(!piecesWithHoles.length) return '';
+  let rows = piecesWithHoles.map(p=>{
+    const d = cycle.drillData[p.id];
+    const holes = d.holes.map(h=>`${h.x.toFixed(1)},${h.y.toFixed(1)}mm`).join('; ');
+    return `<tr><td><b>${letterFor(cycle.pieceRows.indexOf(p))}</b></td><td>${escapeXml(p.label)}</td><td>${p.length}×${p.width}mm</td><td>${d.diameter}mm</td><td>${d.holes.length}</td><td>${holes}</td></tr>`;
+  }).join('');
+  return `
+    <div style="margin-top:10mm;">
+      <h3 style="font-family:'Big Shoulders Display';text-transform:uppercase;font-size:18px;margin:0 0 8px 0;">Drilling Schedule</h3>
+      <table style="width:100%;border-collapse:collapse;font-size:12px;font-family:'IBM Plex Mono',monospace;">
+        <thead><tr style="border-bottom:1.5px solid #2C2620;"><th>Letter</th><th>Part</th><th>Size</th><th>Ø</th><th>Count</th><th>Coordinates (X,Y from top-left)</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+/* ============================= PIECE FORM ============================= */
+function addPiece(){
+  const label = uniquePieceLabel(el('pLabel').value.trim() || 'Piece');
+  const length = parseFloat(el('pLength').value);
+  const width = parseFloat(el('pWidth').value);
+  const qty = parseInt(el('pQty').value)||1;
+  const grain = el('pGrain') ? el('pGrain').checked : false;
+  if(!length || !width || length<=0 || width<=0) return;
+  state.pieces.push({id:pieceSeq++, label, length, width, qty, grain});
+  el('pLabel').value=''; el('pLength').value=''; el('pWidth').value=''; el('pQty').value=1;
+  render();
+}
+function uniquePieceLabel(label){
+  const existing = state.pieces.map(p=>p.label);
+  if(!existing.includes(label)) return label;
+  let n=2;
+  while(existing.includes(`${label} (${n})`)) n++;
+  return `${label} (${n})`;
+}
+function removePiece(id){
+  state.pieces = state.pieces.filter(p=>p.id!==id);
+  render();
+}
+
+/* ============================= RENDER ============================= */
+function render(){
+  computeResult();
+  // rail
+  for(let i=1;i<=4;i++){
+    const r = el('rail-'+i);
+    r.className='step-item'+(i===state.step?' active':'')+(i<state.step?' done':'')+(state.drillMode?'':'')+(state.drillMode?'':'');
+    r.onclick = (!state.drillMode && i<=maxReachable() && i!==state.step) ? ()=>goStep(i) : null;
+  }
+  el('cycleCounter').textContent = 'CYCLE '+String(state.cycles.length+1).padStart(2,'0');
+
+  let mini = '';
+  if(state.cycles.length){
+    mini += '<b>JOB SHEET</b><br>';
+    state.cycles.forEach((c,i)=>{
+      const hasDrill = c.drillData && Object.values(c.drillData).some(d=>d.holes.length>0);
+      mini += `<div class="jobsheet-entry">${c.count}× ${c.unit.replace('(s)','')}${c.count>1?'s':''} — ${c.label}
+        <button class="mini-pdf-btn" onclick="printCycle(${i})">↓ PDF</button>
+        <button class="mini-drill-btn ${hasDrill?'done':''}" onclick="enterDrilling(${i})">${hasDrill?'✓ Drilled':'Drill holes'}</button></div>`;
+    });
+    if(state.cycles.length>1){
+      mini += `<button class="mini-pdf-btn" style="margin-top:8px;width:100%;" onclick="printAllCycles()">↓ Download all (${state.cycles.length})</button>`;
+    }
+  } else {
+    mini = 'No materials confirmed yet.';
+  }
+  el('jobsheetMini').innerHTML = mini;
+
+  const p = el('panelContent');
+  if(state.drillMode){
+    p.innerHTML = renderDrilling();
+    attachDrillListeners();
+    return;
+  }
+  if(state.step===1) p.innerHTML = stepMaterial();
+  else if(state.step===2) p.innerHTML = stepThickness();
+  else if(state.step===3) p.innerHTML = stepPieces();
+  else p.innerHTML = stepDiagrams();
+}
+
+function stepMaterial(){
+  if(state.buildingCustom) return stepCustomMaterialBuilder();
+  let cards = Object.entries(allMaterials()).map(([key,m])=>{
+    const meta = m.type==='sheet' ? m.thicknesses.length+' thickness'+(m.thicknesses.length===1?'':'es')+' · '+m.stockSizes.length+' stock size'+(m.stockSizes.length>1?'s':'') : m.profiles.length+' profile'+(m.profiles.length===1?'':'s')+' · '+m.lengths.length+' stock length'+(m.lengths.length>1?'s':'');
+    const isCustom = key.startsWith('custom_');
+    return `<div class="mat-card ${state.materialKey===key?'sel':''}" onclick="selectMaterial('${key}')">
+      ${isCustom?`<button class="card-remove" onclick="event.stopPropagation(); removeCustomMaterial('${key}')" title="Remove custom material">✕</button>`:''}
+      <div class="swatch" style="background:${m.color}"></div>
+      <div class="name">${m.name}${isCustom?' <span style="font-weight:400;color:var(--graphite-soft);">(custom)</span>':''}</div>
+      <div class="meta">${meta}</div>
+    </div>`;
+  }).join('');
+  const addCard = `<div class="mat-card mat-card-add" onclick="startCustomMaterial()">
+      <div class="add-plus">+</div>
+      <div class="name">Custom material</div>
+      <div class="meta">Not in stock? Define your own type, thickness &amp; stock sizes</div>
+    </div>`;
+  return `
+    <div class="eyebrow">Step 1 of 4</div>
+    <h2>Choose your material</h2>
+    <p class="desc">Every material cuts differently — sheet goods get laid out across standard board sizes, solid hardwood gets laid out along stock lengths. Pick what this cycle is being built from, or define a custom material if what you need isn't in stock here.</p>
+    <div class="card-grid">${cards}${addCard}</div>
+  `;
+}
+function selectMaterial(key){
+  state.materialKey=key; state.thickIndex=null; state.plankLength=null; state.pieces=[];
+  state.step=2; render();
+}
+
+/* ============================= CUSTOM MATERIALS ============================= */
+function startCustomMaterial(){
+  state.buildingCustom = true;
+  state.customDraft = {
+    name:'', type:'sheet', color: CUSTOM_PALETTE[customSeq % CUSTOM_PALETTE.length], grainDefault:true,
+    thicknesses:[], stockSizes:[], profiles:[], lengths:[]
+  };
+  render();
+}
+function cancelCustomMaterial(){
+  state.buildingCustom = false; state.customDraft = null; render();
+}
+function setDraftField(field, value){
+  state.customDraft[field] = value; render();
+}
+function setDraftType(type){
+  state.customDraft.type = type;
+  render();
+}
+function readThicknessInput(selectId, otherId){
+  const sel = el(selectId).value;
+  if(sel==='other'){
+    const v = parseFloat(el(otherId).value);
+    return (v>0) ? v : null;
+  }
+  const v = parseFloat(sel);
+  return (v>0) ? v : null;
+}
+function addDraftThickness(){
+  const mm = readThicknessInput('threshSelect','threshOther');
+  if(mm===null) return;
+  if(!state.customDraft.thicknesses.some(t=>t.mm===mm)) state.customDraft.thicknesses.push({mm});
+  state.customDraft.thicknesses.sort((a,b)=>a.mm-b.mm);
+  render();
+}
+function removeDraftThickness(i){ state.customDraft.thicknesses.splice(i,1); render(); }
+function addDraftStockSize(){
+  const w = parseFloat(el('stockW').value), h = parseFloat(el('stockH').value);
+  if(!(w>0) || !(h>0)) return;
+  if(!state.customDraft.stockSizes.some(s=>s.w===w&&s.h===h)) state.customDraft.stockSizes.push({w,h});
+  render();
+}
+function removeDraftStockSize(i){ state.customDraft.stockSizes.splice(i,1); render(); }
+function addDraftProfile(){
+  const mm = readThicknessInput('profThreshSelect','profThreshOther');
+  const width = parseFloat(el('profWidth').value);
+  if(mm===null || !(width>0)) return;
+  if(!state.customDraft.profiles.some(p=>p.mm===mm&&p.width===width)) state.customDraft.profiles.push({mm,width});
+  state.customDraft.profiles.sort((a,b)=> a.mm-b.mm || a.width-b.width);
+  render();
+}
+function removeDraftProfile(i){ state.customDraft.profiles.splice(i,1); render(); }
+function addDraftLength(){
+  const len = parseFloat(el('plankLen').value);
+  if(!(len>0)) return;
+  if(!state.customDraft.lengths.includes(len)) state.customDraft.lengths.push(len);
+  state.customDraft.lengths.sort((a,b)=>a-b);
+  render();
+}
+function removeDraftLength(i){ state.customDraft.lengths.splice(i,1); render(); }
+
+function customDraftReady(){
+  const d = state.customDraft;
+  if(!d || !d.name.trim()) return false;
+  if(d.type==='sheet') return d.thicknesses.length>0 && d.stockSizes.length>0;
+  return d.profiles.length>0 && d.lengths.length>0;
+}
+function createCustomMaterial(){
+  if(!customDraftReady()) return;
+  const d = state.customDraft;
+  const key = 'custom_'+(customSeq++);
+  const base = { name:d.name.trim(), type:d.type, color:d.color, edge:shade(d.color,-40) };
+  state.customMaterials[key] = d.type==='sheet'
+    ? Object.assign(base, { grainDefault:d.grainDefault, stockSizes:d.stockSizes.slice(), thicknesses:d.thicknesses.slice() })
+    : Object.assign(base, { profiles:d.profiles.slice(), lengths:d.lengths.slice() });
+  state.buildingCustom = false; state.customDraft = null;
+  selectMaterial(key);
+}
+function removeCustomMaterial(key){
+  delete state.customMaterials[key];
+  if(state.materialKey===key){ state.materialKey=null; state.thickIndex=null; state.plankLength=null; state.pieces=[]; state.step=1; }
+  render();
+}
+
+function stepCustomMaterialBuilder(){
+  const d = state.customDraft;
+  const thickOptions = `<option value="">mm…</option>${THICKNESS_PRESETS.map(t=>`<option value="${t}">${t}mm</option>`).join('')}<option value="other">Other…</option>`;
+
+  const thicknessChips = d.thicknesses.map((t,i)=>`<div class="thick-pill sel" style="cursor:default;">${t.mm}mm <span class="pill-x" onclick="removeDraftThickness(${i})">✕</span></div>`).join('') || `<span class="empty-note" style="margin:0;">None added yet</span>`;
+  const stockChips = d.stockSizes.map((s,i)=>`<div class="thick-pill sel" style="cursor:default;">${s.h} × ${s.w}mm <span class="pill-x" onclick="removeDraftStockSize(${i})">✕</span></div>`).join('') || `<span class="empty-note" style="margin:0;">None added yet</span>`;
+  const profileChips = d.profiles.map((p,i)=>`<div class="thick-pill sel" style="cursor:default;">${p.mm}mm × ${p.width}mm <span class="pill-x" onclick="removeDraftProfile(${i})">✕</span></div>`).join('') || `<span class="empty-note" style="margin:0;">None added yet</span>`;
+  const lengthChips = d.lengths.map((l,i)=>`<div class="thick-pill sel" style="cursor:default;">${(l/1000).toFixed(2).replace(/\.?0+$/,'')}m <span class="pill-x" onclick="removeDraftLength(${i})">✕</span></div>`).join('') || `<span class="empty-note" style="margin:0;">None added yet</span>`;
+
+  const sheetSection = `
+    <div class="eyebrow" style="margin-top:24px;">Thicknesses stocked</div>
+    <div class="thick-row">${thicknessChips}</div>
+    <div class="custom-subform">
+      <select id="threshSelect" onchange="document.getElementById('threshOther').style.display=this.value==='other'?'inline-block':'none';">${thickOptions}</select>
+      <input type="number" id="threshOther" placeholder="custom mm" style="display:none;width:90px;">
+      <button class="btn-ghost" onclick="addDraftThickness()">+ Add thickness</button>
+    </div>
+    <div class="eyebrow" style="margin-top:24px;">Stock sheet sizes</div>
+    <div class="thick-row">${stockChips}</div>
+    <div class="custom-subform">
+      <input type="number" id="stockH" placeholder="width (mm)" style="width:110px;">
+      <span style="color:var(--graphite-soft);">×</span>
+      <input type="number" id="stockW" placeholder="length (mm)" style="width:110px;">
+      <button class="btn-ghost" onclick="addDraftStockSize()">+ Add stock size</button>
+    </div>
+    <div class="stock-note">Add every sheet size this material comes in — the planner picks the best one per sheet automatically, same as with stocked materials.</div>
+    <div style="margin-top:16px;">
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;">
+        <input type="checkbox" ${d.grainDefault?'checked':''} onchange="setDraftField('grainDefault', this.checked)"> Lock grain direction by default for pieces cut from this material
+      </label>
+    </div>`;
+
+  const plankSection = `
+    <div class="eyebrow" style="margin-top:24px;">Profiles stocked (thickness × width)</div>
+    <div class="thick-row">${profileChips}</div>
+    <div class="custom-subform">
+      <select id="profThreshSelect" onchange="document.getElementById('profThreshOther').style.display=this.value==='other'?'inline-block':'none';">${thickOptions}</select>
+      <input type="number" id="profThreshOther" placeholder="custom mm" style="display:none;width:90px;">
+      <span style="color:var(--graphite-soft);">×</span>
+      <input type="number" id="profWidth" placeholder="width (mm)" style="width:100px;">
+      <button class="btn-ghost" onclick="addDraftProfile()">+ Add profile</button>
+    </div>
+    <div class="eyebrow" style="margin-top:24px;">Stock lengths</div>
+    <div class="thick-row">${lengthChips}</div>
+    <div class="custom-subform">
+      <input type="number" id="plankLen" placeholder="length (mm)" style="width:110px;">
+      <button class="btn-ghost" onclick="addDraftLength()">+ Add length</button>
+    </div>
+    <div class="stock-note">Add every profile and stock length this material is available in. All boards bought in one cycle come from a single profile + length, chosen in Step 2.</div>`;
+
+  const ready = customDraftReady();
+  const missing = [];
+  if(!d.name.trim()) missing.push('a material name');
+  if(d.type==='sheet'){
+    if(!d.thicknesses.length) missing.push('at least one thickness');
+    if(!d.stockSizes.length) missing.push('at least one stock size');
+  } else {
+    if(!d.profiles.length) missing.push('at least one profile');
+    if(!d.lengths.length) missing.push('at least one stock length');
+  }
+
+  return `
+    <div class="eyebrow">Step 1 of 4 — custom material</div>
+    <h2>Define a custom material</h2>
+    <p class="desc">Set this up once — it behaves exactly like a stocked material afterwards, including automatic best-fit sheet/board selection.</p>
+
+    <div class="piece-form" style="grid-template-columns:1.6fr 1fr auto;">
+      <div><label>Material name</label><input type="text" id="draftName" value="${escapeXml(d.name)}" placeholder="e.g. Laminate Chipboard" onchange="setDraftField('name', this.value)"></div>
+      <div><label>Swatch colour</label><input type="color" id="draftColor" value="${d.color}" style="width:100%;height:38px;padding:2px;" onchange="setDraftField('color', this.value)"></div>
+      <div></div>
+    </div>
+
+    <div style="margin-top:18px;display:flex;gap:10px;">
+      <div class="thick-pill ${d.type==='sheet'?'sel':''}" onclick="setDraftType('sheet')">Sheet goods</div>
+      <div class="thick-pill ${d.type==='plank'?'sel':''}" onclick="setDraftType('plank')">Solid wood / plank</div>
+    </div>
+
+    ${d.type==='sheet' ? sheetSection : plankSection}
+
+    ${!ready ? `<div class="stock-note" style="border-left-color:var(--kerf);">Still need: ${missing.join(', ')}.</div>` : ''}
+
+    <div class="btn-row">
+      <button class="btn-ghost" onclick="cancelCustomMaterial()">← Cancel</button>
+      <button class="btn-primary" ${ready?'':'disabled'} onclick="createCustomMaterial()">Create &amp; continue →</button>
+    </div>
+  `;
+}
+
+function stepThickness(){
+  const m=mat();
+  let pills='';
+  if(m.type==='sheet'){
+    pills = m.thicknesses.map((t,i)=>`<div class="thick-pill ${state.thickIndex===i?'sel':''}" onclick="selectThickness(${i})">${t.mm}mm</div>`).join('');
+  } else {
+    pills = m.profiles.map((t,i)=>`<div class="thick-pill ${state.thickIndex===i?'sel':''}" onclick="selectThickness(${i})">${t.mm}mm × ${t.width}mm</div>`).join('');
+  }
+  let lenPicker='';
+  if(m.type==='plank' && state.thickIndex!==null){
+    lenPicker = `<div style="margin-top:22px;"><div class="eyebrow" style="margin-bottom:10px;">Stock length</div>
+    <div class="thick-row">${m.lengths.map(l=>`<div class="thick-pill ${state.plankLength===l?'sel':''}" onclick="selectPlankLength(${l})">${(l/1000).toFixed(1)}m</div>`).join('')}</div>
+    <div class="stock-note">Pick the shortest standard length that comfortably covers your longest piece — less offcut per board. All boards in this cycle will be bought at this one length so the shop floor isn't juggling mixed stock.</div></div>`;
+  }
+  const stockNote = m.type==='sheet' ? `<div class="stock-note">Available stock sizes for ${m.name}: <b>${m.stockSizes.map(s=>s.h+' × '+s.w+'mm').join(', ')}</b> (width × length). The planner picks the best size per sheet automatically — biggest remaining piece decides the size, then smaller pieces get nested in around it.</div>` : '';
+  const canNext = m.type==='sheet' ? state.thickIndex!==null : (state.thickIndex!==null && state.plankLength!==null);
+  return `
+    <div class="eyebrow">Step 2 of 4 — ${m.name}</div>
+    <h2>Choose thickness${m.type==='plank'?' &amp; profile':''}</h2>
+    <p class="desc">${m.type==='sheet' ? 'This determines which board stock we pull from — thicker material, same footprint.' : 'Hardwood is sold as fixed board profiles (thickness × width), not sheets. Pick the profile closest to what you need — narrower pieces get ripped down from it.'}</p>
+    <div class="thick-row">${pills}</div>
+    ${stockNote}
+    ${lenPicker}
+    <div class="kerf-row">
+      <span>Saw kerf:</span> <input type="number" id="kerfInput" value="${state.kerf}" step="0.5" min="1" max="6" onchange="state.kerf=parseFloat(this.value)||3; render();"> <span>mm — width of material lost to each cut</span>
+    </div>
+    <div class="btn-row">
+      <button class="btn-ghost" onclick="goStep(1)">← Back</button>
+      <button class="btn-primary" ${canNext?'':'disabled'} onclick="goStep(3)">Continue to pieces →</button>
+    </div>
+  `;
+}
+function selectThickness(i){ state.thickIndex=i; render(); }
+function selectPlankLength(l){ state.plankLength=l; render(); }
+
+function stepPieces(){
+  const m=mat();
+  const invalidLetters = new Set(state.result && state.result.errorLetters ? state.result.errorLetters : []);
+  const rows = state.pieces.map((p,idx)=>{
+    const letter = letterFor(idx);
+    const bad = invalidLetters.has(letter);
+    return `
+    <tr class="${bad?'piece-invalid':''}">
+      <td><b>${letter}</b></td>
+      <td>${escapeXml(p.label)}</td>
+      <td>${p.length}mm</td>
+      <td>${p.width}mm</td>
+      <td>${p.qty}</td>
+      <td>${bad ? "can't be cut — see note below" : (m.type==='sheet' ? (p.grain?'grain locked':'may rotate') : (p.width<= (m.profiles[state.thickIndex].width) ? 'fits profile':'needs ripping'))}</td>
+      <td><button class="del-btn" onclick="removePiece(${p.id})">✕</button></td>
+    </tr>`;
+  }).join('');
+  const table = state.pieces.length ? `
+    <table class="piece-table">
+      <thead><tr><th>Letter</th><th>Piece</th><th>Length</th><th>Width</th><th>Qty</th><th>Note</th><th></th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    ${state.result && state.result.errors && state.result.errors.length ? `<div class="warn-box">${state.result.errors.join('<br>')}</div>` : ''}` : `<p class="empty-note">No pieces added yet — add your first piece below.</p>`;
+
+  const grainField = m.type==='sheet' ? `
+    <div>
+      <label>Grain</label>
+      <div class="grain-check"><input type="checkbox" id="pGrain" ${m.grainDefault?'checked':''}> <span style="font-family:'IBM Plex Mono',monospace;">lock direction</span></div>
+    </div>` : `<div></div>`;
+
+  return `
+    <div class="eyebrow">Step 3 of 4 — ${m.name}, ${m.type==='sheet'?m.thicknesses[state.thickIndex].mm+'mm':m.profiles[state.thickIndex].mm+'×'+m.profiles[state.thickIndex].width+'mm'}</div>
+    <h2>List your pieces</h2>
+    <p class="desc">Enter each finished piece you need, length × width, in millimetres. Add quantity for repeats — no need to enter the same shelf four times. Each row gets a letter (A, B, C…) — that's what gets written on the part itself and on the diagram, so a customer can say "part C" and everyone knows exactly which piece that is.</p>
+    ${table}
+    <div class="piece-form">
+      <div><label>Label</label><input type="text" id="pLabel" placeholder="e.g. Side panel"></div>
+      <div><label>Length (mm)</label><input type="number" id="pLength" min="1"></div>
+      <div><label>Width (mm)</label><input type="number" id="pWidth" min="1"></div>
+      <div><label>Qty</label><input type="number" id="pQty" value="1" min="1"></div>
+      ${grainField}
+      <button class="btn-primary" onclick="addPiece()">+ Add</button>
+    </div>
+    <div class="btn-row">
+      <button class="btn-ghost" onclick="goStep(2)">← Back</button>
+      <button class="btn-primary" ${state.pieces.length?'':'disabled'} onclick="goStep(4)">View cutting diagrams →</button>
+    </div>
+    <div class="future">◆ predrilled hole positions — now available via Drill mode on each job sheet</div>
+  `;
+}
+
+const REPEAT_THRESHOLD = 3;
+function groupIdenticalSheets(sheets){
+  const groups = []; const seen = {};
+  sheets.forEach(sh=>{
+    const sig = sh.size.w+'x'+sh.size.h+'|'+sh.placed.slice().sort((a,b)=>a.x-b.x||a.y-b.y)
+      .map(p=>p.letter+':'+p.x+','+p.y+','+p.w+','+p.h+(p.rot?'r':'')).join(';');
+    if(seen[sig]!==undefined) groups[seen[sig]].count++;
+    else { seen[sig]=groups.length; groups.push({sheet:sh, count:1}); }
+  });
+  return groups;
+}
+
+function partsListTable(pieceRows, errorLetters){
+  const invalid = new Set(errorLetters||[]);
+  const rows = pieceRows.map((p,idx)=>{
+    const letter = letterFor(idx);
+    const bad = invalid.has(letter);
+    return `<tr class="${bad?'piece-invalid':''}"><td><b>${letter}</b></td><td>${escapeXml(p.label)}</td><td>${p.length} × ${p.width}mm</td><td>${p.qty}</td><td>${bad?"⚠ can't be cut":''}</td></tr>`;
+  }).join('');
+  return `
+    <table class="piece-table" style="margin-bottom:8px;">
+      <thead><tr><th>Letter</th><th>Part name</th><th>Dimensions</th><th>Qty</th><th></th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+function diagramBodyHTML(m, r, pieceRows, kerf){
+  let errBlock = r.errors && r.errors.length ? `<div class="warn-box"><b>Heads up —</b><br>${r.errors.join('<br>')}</div>` : '';
+
+  let body='';
+  if(r.type==='sheet'){
+    const groups = groupIdenticalSheets(r.sheets);
+    let running = 0;
+    body = groups.map((g)=>{
+      const sh = g.sheet;
+      const usedArea = sh.placed.reduce((a,p)=>a+p.w*p.h,0);
+      const wp = (100*(1-usedArea/(sh.size.w*sh.size.h))).toFixed(1);
+      let tag;
+      if(g.count>=REPEAT_THRESHOLD){
+        const from = running+1, to = running+g.count; running += g.count;
+        tag = `
+        <div class="board-tag repeat">
+          <div class="tag-num">×${g.count}</div>
+          <div class="tag-info">
+            <div class="tag-of">BOARDS ${from}–${to} OF ${r.sheets.length} — IDENTICAL, CUT ${g.count} TIMES</div>
+            <div class="tag-size">${sh.size.h} × ${sh.size.w} × ${r.th.mm}mm ${m.name} &nbsp;·&nbsp; ${sh.placed.length} pieces each &nbsp;·&nbsp; ${wp}% waste each</div>
+          </div>
+        </div>`;
+      } else {
+        running += 1;
+        tag = `
+        <div class="board-tag">
+          <div class="tag-num">${running}</div>
+          <div class="tag-info">
+            <div class="tag-of">SHEET ${running} OF ${r.sheets.length}</div>
+            <div class="tag-size">${sh.size.h} × ${sh.size.w} × ${r.th.mm}mm ${m.name} &nbsp;·&nbsp; ${sh.placed.length} pieces &nbsp;·&nbsp; ${wp}% waste</div>
+          </div>
+        </div>`;
+      }
+      return `
+      <div class="sheet-block">
+        ${tag}
+        <div class="sheet-stage">
+          <div class="diagram-card">${renderSheetSVG(sh, sh.size.w, sh.size.h, m.color, m.edge, kerf, running)}</div>
+        </div>
+      </div>`;
+    }).join('');
+  } else {
+    body = r.boards.map((b,idx)=>{
+      const wp = (100*(1-b.used/r.stockLen)).toFixed(1);
+      return `
+      <div class="sheet-block">
+        <div class="board-tag">
+          <div class="tag-num">${idx+1}</div>
+          <div class="tag-info">
+            <div class="tag-of">BOARD ${idx+1} OF ${r.boards.length}</div>
+            <div class="tag-size">${r.prof.mm}mm × ${r.prof.width}mm × ${(r.stockLen/1000).toFixed(1)}m &nbsp;·&nbsp; ${b.segments.length} pieces &nbsp;·&nbsp; ${wp}% waste</div>
+          </div>
+        </div>
+        <div class="sheet-stage">
+          <div class="diagram-card">${renderPlankSVG(b, r.stockLen, r.prof.width, m.color, m.edge, idx)}</div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  const legend = r.type==='sheet' ? `
+    <div class="legend">
+      <span><i style="background:#E8622C"></i> kerf (saw cut, ${kerf}mm)</span>
+      <span><i style="background:#fff;border:1px solid #2C2620"></i> finished piece</span>
+      <span><i style="background:#4C7A4C"></i> usable offcut</span>
+      <span><i style="background:#DCD5C4"></i> scrap / trim</span>
+      <span><i style="background:#F0B429"></i> cut order</span>
+    </div>` : `
+    <div class="legend">
+      <span><i style="background:#E8622C"></i> kerf (saw cut, ${kerf}mm)</span>
+      <span><i style="background:#fff;border:1px solid #2C2620"></i> finished piece</span>
+      <span><i style="background:#DCD5C4"></i> end offcut</span>
+      <span><i style="background:#F0B429"></i> cut order</span>
+    </div>`;
+
+  const totalUnits = r.type==='sheet' ? r.sheets.length : r.boards.length;
+  const breakdownLines = r.type==='sheet' && r.sizeCounts ?
+    Object.entries(r.sizeCounts).map(([size,count])=>`<div class="line"><span>&nbsp;&nbsp;— ${size}</span><b>${count}×</b></div>`).join('') : '';
+
+  return `
+    <div class="eyebrow" style="margin-top:20px;">Parts list — write the letter on each part</div>
+    ${partsListTable(pieceRows, r.errorLetters)}
+    ${errBlock}
+    ${legend}
+    ${body}
+    <div class="summary-box ${r.wastePct>25?'warn':''}">
+      <div class="line" style="font-size:15px;"><span>SHEETS REQUIRED</span><b>${totalUnits}</b></div>
+      ${breakdownLines}
+      <div class="line"><span>Overall waste</span><b>${r.wastePct.toFixed(1)}%</b></div>
+      <div class="line"><span>Kerf allowance</span><b>${kerf}mm per cut</b></div>
+    </div>
+  `;
+}
+
+function stepDiagrams(){
+  const m=mat(); const r=state.result;
+
+  // Offcut reuse prompt
+  if(state.pendingOffcutPrompt){
+    const prompt = state.pendingOffcutPrompt;
+    const offcutList = prompt.offcuts.map(o=>`&nbsp;&nbsp;• Sheet ${o.sheet}: <b>${o.w} × ${o.h}mm</b>`).join('<br>');
+    return `
+      <div class="eyebrow">Step 4 of 4 — ${m.name}</div>
+      <h2>Use leftover space?</h2>
+      <p class="desc">You already have a job sheet for this exact material and thickness. Instead of starting a fresh sheet, these pieces can be nested into the usable offcuts left over from that job — saving money and waste.</p>
+      <div class="offcut-prompt">
+        <h3>Available offcuts from previous job</h3>
+        <div class="offcut-list">${offcutList}</div>
+        <p style="font-size:13px;color:var(--graphite-soft);margin-top:10px;">Letters will continue from the previous job sheet (e.g. D, E, F…) so every part keeps a unique ID across the combined job.</p>
+        <div class="btn-row" style="margin-top:16px;">
+          <button class="btn-ghost" onclick="state.pendingOffcutPrompt=null; render();">← Back to diagram</button>
+          <button class="btn-bad" onclick="confirmCycleNormal()">No, start new job sheet</button>
+          <button class="btn-good" onclick="mergeWithPreviousCycle(${prompt.prevCycleIdx})">Yes, use leftover space</button>
+        </div>
+      </div>
+    `;
+  }
+
+  if(!r){
+    return `
+      <div class="eyebrow">Step 4 of 4 — ${m.name}</div>
+      <h2>Cutting diagrams</h2>
+      <p class="desc">No pieces added yet for this cycle.</p>
+      <div class="btn-row"><button class="btn-primary" onclick="goStep(3)">← Add pieces</button></div>
+    `;
+  }
+  return `
+    <div class="eyebrow">Step 4 of 4 — ${m.name}</div>
+    <h2>Cutting diagrams</h2>
+    <p class="desc">Straight guillotine cuts only, in the order numbered on each piece — no need to re-square the saw mid-sheet. Kerf is shown to scale between pieces, and this view updates live as you edit pieces in Step 3.</p>
+    ${diagramBodyHTML(m, r, state.pieces, state.kerf)}
+    <div class="btn-row">
+      <button class="btn-ghost" onclick="goStep(3)">← Adjust pieces</button>
+      <button class="btn-ghost" onclick="printCurrent()">⬇ Save as PDF</button>
+      <button class="btn-primary" onclick="promptOffcutReuse()">Confirm &amp; start next cycle →</button>
+    </div>
+  `;
+}
+
+/* ============================= DRILLING RENDER ============================= */
+function renderDrilling(){
+  const cycle = state.cycles[state.drillCycleIndex];
+  const piece = cycle.pieceRows[state.drillPieceIndex];
+  const rules = getDrillRules(cycle.materialMeta.name, state.drillDiameter);
+  const rep = findRepeatablePattern();
+
+  // Build piece list sidebar
+  const pieceButtons = cycle.pieceRows.map((p,i)=>{
+    const letter = letterFor(i);
+    const isActive = i===state.drillPieceIndex;
+    const hasData = cycle.drillData && cycle.drillData[p.id] && cycle.drillData[p.id].holes.length>0;
+    return `<div class="drill-piece-btn ${isActive?'active':''} ${hasData?'done':''}" onclick="drillSelectPiece(${i})">
+      <div><b>${letter}</b> — ${escapeXml(p.label)}</div>
+      <div class="dim">${p.length} × ${p.width}mm</div>
+      <div class="status ${hasData?'done':'pending'}">${hasData?'✓ '+cycle.drillData[p.id].holes.length+' holes':'Pending'}</div>
+    </div>`;
+  }).join('');
+
+  // Build visual SVG
+  const w = piece.length, h = piece.width;
+  const maxPx = 520;
+  const scale = Math.min(maxPx/w, maxPx/h, 1.5);
+  const pxW = Math.round(w*scale), pxH = Math.round(h*scale);
+  const fs = Math.max(10, Math.min(14, w*0.025*scale));
+
+  let svg = `<svg id="drillSvg" viewBox="0 0 ${w} ${h}" width="${pxW}" height="${pxH}" xmlns="http://www.w3.org/2000/svg" style="border:1px solid var(--line);">`;
+  // Piece background
+  svg += `<rect x="0" y="0" width="${w}" height="${h}" fill="#fff" stroke="#2C2620" stroke-width="${w*0.003}"/>`;
+  // Safe zone boundary
+  const safe = rules.minEdge;
+  if(safe*2 < w && safe*2 < h){
+    svg += `<rect x="${safe}" y="${safe}" width="${w-safe*2}" height="${h-safe*2}" fill="none" stroke="#B4432E" stroke-width="${w*0.002}" stroke-dasharray="${w*0.008},${w*0.008}" opacity="0.6"/>`;
+    svg += `<text x="${safe+4}" y="${safe-4}" font-family="IBM Plex Mono" font-size="${fs*0.8}" fill="#B4432E" opacity="0.7">min ${safe.toFixed(1)}mm</text>`;
+  }
+  // Axis labels
+  svg += `<text x="${w/2}" y="${-fs*0.5}" font-family="IBM Plex Mono" font-size="${fs}" fill="#5B5347" text-anchor="middle">${w}mm</text>`;
+  svg += `<text x="${-fs*0.5}" y="${h/2}" font-family="IBM Plex Mono" font-size="${fs}" fill="#5B5347" text-anchor="middle" transform="rotate(-90 ${-fs*0.5} ${h/2})">${h}mm</text>`;
+  // Holes
+  state.drillHoles.forEach((hle,i)=>{
+    const r = hle.diameter/2;
+    const color = hle.valid ? '#4C7A4C' : '#B4432E';
+    const fill = hle.valid ? 'rgba(76,122,76,0.15)' : 'rgba(180,67,46,0.15)';
+    svg += `<circle cx="${hle.x}" cy="${hle.y}" r="${r}" fill="${fill}" stroke="${color}" stroke-width="${w*0.002}" data-idx="${i}" class="drill-hole-circle"/>`;
+    svg += `<text x="${hle.x}" y="${hle.y-r-4}" font-family="IBM Plex Mono" font-size="${fs*0.75}" fill="${color}" text-anchor="middle">${hle.x.toFixed(0)},${hle.y.toFixed(0)}</text>`;
+  });
+  svg += `</svg>`;
+
+  // Hole list
+  const holeRows = state.drillHoles.map((h,i)=>{
+    const errTxt = h.errors.length ? h.errors.join('; ') : 'OK';
+    return `<div class="drill-hole-row ${h.valid?'valid':'error'}">
+      <span><span class="hole-coords">${h.x.toFixed(1)}, ${h.y.toFixed(1)}mm</span> — Ø${h.diameter}mm ${h.valid?'':'— '+errTxt}</span>
+      <button class="hole-rm" onclick="removeDrillHole(${i})">✕</button>
+    </div>`;
+  }).join('') || '<span class="empty-note">No holes yet — click the piece or use a preset.</span>';
+
+  // Preset controls (conditional)
+  let presetControls = '';
+  if(state.drillPreset==='even_h' || state.drillPreset==='even_v'){
+    presetControls = `
+      <div style="display:flex;gap:10px;align-items:end;margin-top:8px;">
+        <div><label>Number of holes</label><input type="number" id="presetCount" value="3" min="1" max="20"></div>
+        <div><label>Spacing (mm)</label><input type="number" id="presetSpacing" value="32" min="10"></div>
+      </div>`;
+  } else if(state.drillPreset==='grid'){
+    presetControls = `
+      <div style="display:flex;gap:10px;align-items:end;margin-top:8px;flex-wrap:wrap;">
+        <div><label>Columns</label><input type="number" id="presetCols" value="2" min="1" max="10" style="width:70px;"></div>
+        <div><label>Rows</label><input type="number" id="presetRows" value="2" min="1" max="10" style="width:70px;"></div>
+        <div><label>X spacing</label><input type="number" id="presetSpacingX" value="32" min="10" style="width:80px;"></div>
+        <div><label>Y spacing</label><input type="number" id="presetSpacingY" value="32" min="10" style="width:80px;"></div>
+      </div>`;
+  }
+
+  const safeNote = state.drillHoles.some(h=>!h.valid)
+    ? `<div class="safe-zone-note">⚠ Some holes violate structural limits for ${cycle.materialMeta.name}. Fix or remove them before printing.</div>`
+    : `<div class="safe-zone-note ok">✓ All holes meet minimum edge distance (${rules.minEdge.toFixed(1)}mm) and spacing (${rules.minSpacing.toFixed(1)}mm) for ${cycle.materialMeta.name}.</div>`;
+
+  return `
+    <div class="eyebrow">Drilling — ${cycle.label}</div>
+    <h2>${escapeXml(piece.label)} <span style="font-family:'IBM Plex Mono';font-size:16px;color:var(--graphite-soft);">(${piece.length} × ${piece.width}mm) — Part ${letterFor(state.drillPieceIndex)}</span></h2>
+    <p class="desc">Click directly on the piece to place a hole, or use a preset. Green circles are valid; red circles break the safe-zone rule for this material. The dashed red line shows the minimum safe distance from any edge.</p>
+
+    ${rep ? `<div class="repeat-banner"><span>Same size as <b>${escapeXml(rep.piece.label)} (${letterFor(cycle.pieceRows.indexOf(rep.piece))})</b> — ${rep.data.holes.length} holes saved</span><button class="btn-good" style="padding:6px 14px;font-size:12px;" onclick="repeatPattern()">Repeat pattern</button></div>` : ''}
+
+    <div class="drill-layout">
+      <div>
+        <div class="eyebrow" style="margin-bottom:8px;">Pieces in job</div>
+        <div class="drill-piece-list">${pieceButtons}</div>
+      </div>
+      <div>
+        <div class="drill-stage">
+          <div class="drill-visual">${svg}</div>
+
+          <div class="drill-controls">
+            <div><label>Hole diameter (mm)</label><input type="number" value="${state.drillDiameter}" min="1" max="50" step="0.5" onchange="setDrillDiameter(parseFloat(this.value))"></div>
+            <div><label>Current holes</label><input type="text" value="${state.drillHoles.length}" readonly style="background:var(--paper-2);"></div>
+          </div>
+
+          <div style="margin-top:14px;">
+            <div class="eyebrow">Presets</div>
+            <div class="preset-grid">
+              <div class="preset-btn ${state.drillPreset==='manual'?'active':''}" onclick="applyPreset('manual')">Manual click<div class="preset-desc">Click piece to place</div></div>
+              <div class="preset-btn ${state.drillPreset==='centre'?'active':''}" onclick="applyPreset('centre')">Dead centre<div class="preset-desc">1 hole in middle</div></div>
+              <div class="preset-btn ${state.drillPreset==='corners'?'active':''}" onclick="applyPreset('corners')">Corners<div class="preset-desc">4 holes inset</div></div>
+              <div class="preset-btn ${state.drillPreset==='even_h'?'active':''}" onclick="applyPreset('even_h')">Evenly spaced H<div class="preset-desc">Row along centre</div></div>
+              <div class="preset-btn ${state.drillPreset==='even_v'?'active':''}" onclick="applyPreset('even_v')">Evenly spaced V<div class="preset-desc">Column along centre</div></div>
+              <div class="preset-btn ${state.drillPreset==='grid'?'active':''}" onclick="applyPreset('grid')">Grid<div class="preset-desc">Rows × columns</div></div>
+            </div>
+            ${presetControls}
+            ${state.drillPreset!=='manual' ? `<button class="btn-primary" style="margin-top:8px;padding:8px 16px;font-size:12px;" onclick="applyPreset(state.drillPreset)">Apply preset</button>` : ''}
+          </div>
+
+          <div class="drill-hole-list">
+            <div class="eyebrow">Hole list</div>
+            ${holeRows}
+            ${state.drillHoles.length ? `<button class="btn-ghost" style="margin-top:8px;padding:6px 12px;font-size:12px;" onclick="clearDrillHoles()">Clear all holes</button>` : ''}
+          </div>
+
+          ${safeNote}
+
+          <div class="drill-nav">
+            <button class="btn-ghost" ${state.drillPieceIndex>0?'':'disabled'} onclick="drillPrev()">← Previous piece</button>
+            <button class="btn-ghost" onclick="exitDrilling()">Back to job sheet</button>
+            <button class="btn-primary" ${state.drillPieceIndex < cycle.pieceRows.length-1 ? '' : 'disabled'} onclick="drillNext()">Next piece →</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function attachDrillListeners(){
+  const svg = el('drillSvg');
+  if(!svg) return;
+  svg.addEventListener('click', function(e){
+    if(state.drillPreset !== 'manual') return;
+    const rect = svg.getBoundingClientRect();
+    const cycle = state.cycles[state.drillCycleIndex];
+    const piece = cycle.pieceRows[state.drillPieceIndex];
+    const scaleX = piece.length / rect.width;
+    const scaleY = piece.width / rect.height;
+    const x = (e.clientX - rect.left) * scaleX;
+    const y = (e.clientY - rect.top) * scaleY;
+    addDrillHole(x, y);
+  });
+}
+
+render();
+</script>
+</body>
+</html>
