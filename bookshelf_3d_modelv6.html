@@ -63,6 +63,7 @@
       <button id="btnCtxNext" style="display:none;">&#8594;</button>
       <button id="btnSpin">Auto-rotate: off</button>
       <button id="btnReset">Reset view</button>
+      <button id="btnShare">Copy link</button>
     </div>
     <div id="viabilityBanner"><b id="viabilityTitle">Checking...</b><span id="viabilityText"></span></div>
     <div id="backingPanel">
@@ -811,6 +812,46 @@
     wall.material.color.lerp(wallTargetColor, 0.05);
     renderer.render(scene, camera);
   }
+  // ---- Shareable links: encode the current design in the URL ----
+  // buildShareURL() writes the design into query params; applyStateFromURL() reads
+  // them back on load, so a copied link reopens the exact same design.
+  const SHARE_SLIDERS = ['sW','sD','sH','sT','sCH','sSK','sNS'];
+  function buildShareURL(){
+    const q = new URLSearchParams();
+    SHARE_SLIDERS.forEach(id=>{ q.set(id, document.getElementById(id).value); });
+    q.set('handle', handleStyle);
+    q.set('wood', document.getElementById('colWood').value.replace('#',''));
+    const base = location.href.split('#')[0].split('?')[0];
+    return base + '?' + q.toString();
+  }
+  function applyStateFromURL(){
+    const q = new URLSearchParams(location.search);
+    if (![...q.keys()].length) return;
+    SHARE_SLIDERS.forEach(id=>{ if (q.has(id)) document.getElementById(id).value = q.get(id); });
+    if (q.has('handle')){
+      const sel = document.getElementById('selHandle');
+      sel.value = q.get('handle');
+      handleStyle = sel.value || handleStyle;
+    }
+    if (q.has('wood')){
+      const c = '#' + q.get('wood').replace('#','');
+      document.getElementById('colWood').value = c;
+      pine.color.set(c);
+      pineEdge.color.copy(shade(c, 0.88));
+    }
+  }
+  document.getElementById('btnShare').addEventListener('click', function(){
+    const btn = this, url = buildShareURL();
+    try { history.replaceState(null, '', url); } catch(e){ /* file:// may block; ignore */ }
+    const flash = msg=>{ btn.textContent = msg; setTimeout(()=>{ btn.textContent = 'Copy link'; }, 2000); };
+    if (navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(url).then(()=>flash('Link copied!')).catch(()=>flash('Link in address bar'));
+    } else {
+      flash('Link in address bar');
+    }
+  });
+
+  applyStateFromURL();
   rebuild();
   animate();
 })();
