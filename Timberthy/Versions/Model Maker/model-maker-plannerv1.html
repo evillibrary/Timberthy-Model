@@ -161,6 +161,7 @@
     <table class="spec" id="liveSchedule">
       <tr><th>Ref</th><th>Piece</th><th>Qty</th><th>L &times; W (mm)</th><th>Material</th></tr>
     </table>
+    <div id="totalArea" style="margin-top:10px; font-size:12.5px; color:#4a4a45;"></div>
   </div>
 
   <div id="dims">
@@ -621,9 +622,11 @@
       const selEl = document.getElementById('selHandle');
       const handleText = selEl.options[selEl.selectedIndex].text;
       const rows = [];
+      let totalAreaMM2 = 0;
       function push(letter,piece,qty,l,w,mat){
         rows.push('<tr><td><span class="tagref">'+letter+'</span></td><td>'+piece+'</td><td>'+qty+
           '</td><td>'+Math.round(l)+' &times; '+Math.round(w)+'</td><td>'+mat+'</td></tr>');
+        totalAreaMM2 += qty * l * w * 2; // both faces of each panel
       }
       push('A','Interior shelf', numShelves+1, Math.max(Wi,D), Math.min(Wi,D), pineLabel);
       push('B','Top panel', 1, Math.max(W,D), Math.min(W,D), pineLabel);
@@ -635,6 +638,9 @@
       rows.push('<tr><td><span class="tagref">H</span></td><td>Door hinge</td><td>4</td><td>&mdash;</td><td>Metal hardware</td></tr>');
       document.getElementById('liveSchedule').innerHTML =
         '<tr><th>Ref</th><th>Piece</th><th>Qty</th><th>L &times; W (mm)</th><th>Material</th></tr>' + rows.join('');
+      document.getElementById('totalArea').innerHTML =
+        '<b>Approx. surface area (both faces, excl. edges):</b> '+(totalAreaMM2/1e6).toFixed(2)+' m&sup2; '+
+        '&mdash; a starting point for estimating oil/stain/varnish coverage.';
     })();
 
     // ---- Context objects follow the shelf's width ----
