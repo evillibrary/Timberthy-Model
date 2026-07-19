@@ -340,6 +340,7 @@ const MATERIALS = {
 
 const THICKNESS_PRESETS = [3,4,6,9,12,16,18,19,22,25,28,30,32,35,38,45,50];
 const CUSTOM_PALETTE = ['#C9B79C','#B7C4B0','#C7A895','#A9B8C4','#D6C088','#B79CB4','#9CC0C4','#C4A9A0'];
+const CURRENCY = 'R';
 
 /* ============================= DRILLING RULES ============================= */
 // Structural integrity: edge distance and spacing depend on material density and integrity.
@@ -375,6 +376,8 @@ let state = {
   thickIndex:null,
   plankLength:null,
   kerf:3,
+  pricePerM3:0,
+  priceMemory:{}, // remembers last-entered price per material key
   pieces:[],
   result:null,
   cycles:[],
@@ -697,6 +700,10 @@ function renderPlankSVG(board, stockLength, profileWidth, matColor, matEdge, idx
 }
 
 /* ============================= COMPUTE ============================= */
+function sheetVolumeCost(sheets, thicknessMm){
+  return sheets.reduce((sum,sh)=> sum + (sh.size.w/1000)*(sh.size.h/1000)*(thicknessMm/1000)*state.pricePerM3, 0);
+}
+
 function computeResult(){
   if(!state.materialKey || state.thickIndex===null || state.pieces.length===0){
     state.result = null;
@@ -714,14 +721,15 @@ function computeResult(){
       const key = sh.size.h+' × '+sh.size.w+'mm';
       sizeCounts[key] = (sizeCounts[key]||0)+1;
     });
-    state.result = {type:'sheet', sheets, errors, errorLetters, th, sizeCounts, wastePct: totalArea? (100*(1-usedArea/totalArea)):0};
+    state.result = {type:'sheet', sheets, errors, errorLetters, th, sizeCounts, wastePct: totalArea? (100*(1-usedArea/totalArea)):0, totalCost: sheetVolumeCost(sheets, th.mm)};
   } else {
     const prof = m.profiles[state.thickIndex];
     const stockLen = state.plankLength;
     const {boards, errors} = packPlanks(state.pieces, stockLen, state.kerf);
     let totalLen=0, usedLen=0;
     boards.forEach(b=>{ totalLen+=stockLen; usedLen+=b.used; });
-    state.result = {type:'plank', boards, errors, prof, stockLen, wastePct: totalLen? (100*(1-usedLen/totalLen)):0};
+    const totalCost = boards.length * (stockLen/1000)*(prof.width/1000)*(prof.mm/1000)*state.pricePerM3;
+    state.result = {type:'plank', boards, errors, prof, stockLen, wastePct: totalLen? (100*(1-usedLen/totalLen)):0, totalCost};
   }
 }
 
@@ -807,7 +815,7 @@ function mergeWithPreviousCycle(prevIdx){
     sizeCounts[key] = (sizeCounts[key]||0)+1;
   });
   // Update previous cycle
-  prev.result = {type:'sheet', sheets, errors, errorLetters, th, sizeCounts, wastePct: totalArea? (100*(1-usedArea/totalArea)):0};
+  prev.result = {type:'sheet', sheets, errors, errorLetters, th, sizeCounts, wastePct: totalArea? (100*(1-usedArea/totalArea)):0, totalCost: sheetVolumeCost(sheets, th.mm)};
   prev.pieceRows = prev.pieceRows.concat(state.pieces.map(p=>({...p})));
   prev.count = sheets.length;
   prev.wastePct = prev.result.wastePct;
@@ -1046,6 +1054,10 @@ function render(){
     if(state.cycles.length>1){
       mini += `<button class="mini-pdf-btn" style="margin-top:8px;width:100%;" onclick="printAllCycles()">↓ Download all (${state.cycles.length})</button>`;
     }
+    const grandTotal = state.cycles.reduce((s,c)=>s+(c.result.totalCost||0),0);
+    if(grandTotal>0){
+      mini += `<div class="jobsheet-entry" style="border-top:1.5px solid var(--tape);padding-top:8px;"><b>TOTAL EST. COST</b><br>${CURRENCY}${grandTotal.toFixed(2)}</div>`;
+    }
   } else {
     mini = 'No materials confirmed yet.';
   }
@@ -1089,7 +1101,14 @@ function stepMaterial(){
 }
 function selectMaterial(key){
   state.materialKey=key; state.thickIndex=null; state.plankLength=null; state.pieces=[];
+  state.pricePerM3 = state.priceMemory[key] || 0;
   state.step=2; render();
+}
+function setPricePerM3(v){
+  const n = Math.max(0, parseFloat(v)||0);
+  state.pricePerM3 = n;
+  if(state.materialKey) state.priceMemory[state.materialKey] = n;
+  render();
 }
 
 /* ============================= CUSTOM MATERIALS ============================= */
@@ -1290,6 +1309,9 @@ function stepThickness(){
     <div class="kerf-row">
       <span>Saw kerf:</span> <input type="number" id="kerfInput" value="${state.kerf}" step="0.5" min="1" max="6" onchange="state.kerf=parseFloat(this.value)||3; render();"> <span>mm — width of material lost to each cut</span>
     </div>
+    <div class="kerf-row">
+      <span>Price per m&sup3;:</span> ${CURRENCY}<input type="number" id="priceInput" value="${state.pricePerM3||''}" step="1" min="0" placeholder="0" onchange="setPricePerM3(this.value)"> <span>— what this material actually costs you, used to estimate total job cost</span>
+    </div>
     <div class="btn-row">
       <button class="btn-ghost" onclick="goStep(1)">← Back</button>
       <button class="btn-primary" ${canNext?'':'disabled'} onclick="goStep(3)">Continue to pieces →</button>
@@ -1466,6 +1488,7 @@ function diagramBodyHTML(m, r, pieceRows, kerf){
       ${breakdownLines}
       <div class="line"><span>Overall waste</span><b>${r.wastePct.toFixed(1)}%</b></div>
       <div class="line"><span>Kerf allowance</span><b>${kerf}mm per cut</b></div>
+      <div class="line"><span>Estimated material cost</span><b>${r.totalCost>0 ? CURRENCY+r.totalCost.toFixed(2) : 'set a price in Step 2'}</b></div>
     </div>
   `;
 }
