@@ -369,6 +369,30 @@ function getDrillRules(materialName, holeDiameter) {
   return { minEdge, minSpacing, ...rule };
 }
 
+/* ============================= SCREW GUIDANCE ============================= */
+// General starting points only, not a fastener spec — always pre-drill near edges
+// and check the screw won't punch through the far face of what it's going into.
+const SCREW_GUIDE = {
+  chipboard: 'Coarse-thread chipboard/confirmat screws — fine woodscrew threads strip out of chipboard easily.',
+  laminate:  'Coarse-thread chipboard/confirmat screws — fine woodscrew threads strip out of laminate board easily.',
+  plywood:   'Standard fine-thread woodscrews — plywood’s layered grain holds threads well.',
+  mdf:       'Fine-thread woodscrews, always pre-drilled — MDF has no grain to speak of and crumbles without a pilot hole.',
+  pine:      'Standard fine-thread woodscrews, pre-drilled near edges — softwood splits along the grain otherwise.',
+  hardwood:  'Standard fine-thread woodscrews, always pre-drilled — hardwood splits easily without a pilot hole.',
+  oak:       'Fine-thread woodscrews, always pre-drilled — oak splits easily and reacts with plain steel, so use stainless or coated screws.',
+  default:   'Standard general-purpose woodscrews should be fine — pre-drill to be safe.'
+};
+
+function getScrewRecommendation(materialName, thicknessMm) {
+  const name = materialName.toLowerCase();
+  let note = SCREW_GUIDE.default;
+  for (const [key, val] of Object.entries(SCREW_GUIDE)) {
+    if (name.includes(key)) { note = val; break; }
+  }
+  const lenLow = Math.round(thicknessMm * 2), lenHigh = Math.round(thicknessMm * 2.5);
+  return `${note} For ${thicknessMm}mm material, a screw around ${lenLow}–${lenHigh}mm long is a common starting point — check it won't come through the far side of whatever it's driving into.`;
+}
+
 /* ============================= STATE ============================= */
 let state = {
   step:1,
@@ -996,6 +1020,8 @@ function drillPrintHTML(cycle){
     const holes = d.holes.map(h=>`${h.x.toFixed(1)},${h.y.toFixed(1)}mm`).join('; ');
     return `<tr><td><b>${letterFor(cycle.pieceRows.indexOf(p))}</b></td><td>${escapeXml(p.label)}</td><td>${p.length}×${p.width}mm</td><td>${d.diameter}mm</td><td>${d.holes.length}</td><td>${holes}</td></tr>`;
   }).join('');
+  const thicknessMm = cycle.result.type==='sheet' ? cycle.result.th.mm : cycle.result.prof.mm;
+  const screwNote = getScrewRecommendation(cycle.materialMeta.name, thicknessMm);
   return `
     <div style="margin-top:10mm;">
       <h3 style="font-family:'Big Shoulders Display';text-transform:uppercase;font-size:18px;margin:0 0 8px 0;">Drilling Schedule</h3>
@@ -1003,6 +1029,7 @@ function drillPrintHTML(cycle){
         <thead><tr style="border-bottom:1.5px solid #2C2620;"><th>Letter</th><th>Part</th><th>Size</th><th>Ø</th><th>Count</th><th>Coordinates (X,Y from top-left)</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
+      <p style="font-size:11px;color:#5B5347;margin-top:8px;">Fasteners: ${screwNote}</p>
     </div>
   `;
 }
@@ -1544,6 +1571,8 @@ function renderDrilling(){
   const piece = cycle.pieceRows[state.drillPieceIndex];
   const rules = getDrillRules(cycle.materialMeta.name, state.drillDiameter);
   const rep = findRepeatablePattern();
+  const thicknessMm = cycle.result.type==='sheet' ? cycle.result.th.mm : cycle.result.prof.mm;
+  const screwNote = getScrewRecommendation(cycle.materialMeta.name, thicknessMm);
 
   // Build piece list sidebar
   const pieceButtons = cycle.pieceRows.map((p,i)=>{
@@ -1647,6 +1676,8 @@ function renderDrilling(){
           </div>
 
           ${safeNote}
+
+          <div class="stock-note" style="margin-top:10px;">🔩 ${screwNote}</div>
 
           <div class="drill-nav">
             <button class="btn-ghost" ${state.drillPieceIndex>0?'':'disabled'} onclick="drillPrev()">← Previous piece</button>
