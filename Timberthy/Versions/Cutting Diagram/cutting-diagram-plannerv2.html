@@ -327,19 +327,20 @@ const MATERIALS = {
   laminated_pine: {
     name:'Laminated Pine Board',
     type:'sheet', color:'#E3C08E', edge:'#B98F5C', grainDefault:true,
-    stockSizes:[ {w:1800,h:305}, {w:2400,h:305}, {w:1800,h:455} ],
+    stockSizes:[ {w:1800,h:305,price:null}, {w:2400,h:305,price:null}, {w:1800,h:455,price:null} ],
     thicknesses:[ {mm:12},{mm:16},{mm:18},{mm:22},{mm:30} ]
   },
   plywood: {
     name:'Plywood',
     type:'sheet', color:'#D9BE8C', edge:'#A9834E', grainDefault:true,
-    stockSizes:[ {w:2440,h:1220} ],
+    stockSizes:[ {w:2440,h:1220,price:null} ],
     thicknesses:[3,4,6,9,12,15,18,20].map(mm=>({mm}))
   }
 };
 
 const THICKNESS_PRESETS = [3,4,6,9,12,16,18,19,22,25,28,30,32,35,38,45,50];
 const CUSTOM_PALETTE = ['#C9B79C','#B7C4B0','#C7A895','#A9B8C4','#D6C088','#B79CB4','#9CC0C4','#C4A9A0'];
+const CURRENCY = 'R';
 
 /* ============================= DRILLING RULES ============================= */
 // Structural integrity: edge distance and spacing depend on material density and integrity.
@@ -366,6 +367,30 @@ function getDrillRules(materialName, holeDiameter) {
   const minEdge = Math.max(holeDiameter * rule.minEdgeFactor, rule.absoluteMin);
   const minSpacing = holeDiameter * rule.spacingFactor;
   return { minEdge, minSpacing, ...rule };
+}
+
+/* ============================= SCREW GUIDANCE ============================= */
+// General starting points only, not a fastener spec — always pre-drill near edges
+// and check the screw won't punch through the far face of what it's going into.
+const SCREW_GUIDE = {
+  chipboard: 'Coarse-thread chipboard/confirmat screws — fine woodscrew threads strip out of chipboard easily.',
+  laminate:  'Coarse-thread chipboard/confirmat screws — fine woodscrew threads strip out of laminate board easily.',
+  plywood:   'Standard fine-thread woodscrews — plywood’s layered grain holds threads well.',
+  mdf:       'Fine-thread woodscrews, always pre-drilled — MDF has no grain to speak of and crumbles without a pilot hole.',
+  pine:      'Standard fine-thread woodscrews, pre-drilled near edges — softwood splits along the grain otherwise.',
+  hardwood:  'Standard fine-thread woodscrews, always pre-drilled — hardwood splits easily without a pilot hole.',
+  oak:       'Fine-thread woodscrews, always pre-drilled — oak splits easily and reacts with plain steel, so use stainless or coated screws.',
+  default:   'Standard general-purpose woodscrews should be fine — pre-drill to be safe.'
+};
+
+function getScrewRecommendation(materialName, thicknessMm) {
+  const name = materialName.toLowerCase();
+  let note = SCREW_GUIDE.default;
+  for (const [key, val] of Object.entries(SCREW_GUIDE)) {
+    if (name.includes(key)) { note = val; break; }
+  }
+  const lenLow = Math.round(thicknessMm * 2), lenHigh = Math.round(thicknessMm * 2.5);
+  return `${note} For ${thicknessMm}mm material, a screw around ${lenLow}–${lenHigh}mm long is a common starting point — check it won't come through the far side of whatever it's driving into.`;
 }
 
 /* ============================= STATE ============================= */
@@ -697,6 +722,18 @@ function renderPlankSVG(board, stockLength, profileWidth, matColor, matEdge, idx
 }
 
 /* ============================= COMPUTE ============================= */
+// Prices live on the specific stock size/length actually used, not a volume estimate -
+// real supplier pricing isn't linear with volume. Any board left unpriced is simply
+// excluded from the total (costComplete flags that so the total isn't shown as final).
+function sumSheetPrices(sheets){
+  let total = 0, costComplete = sheets.length>0;
+  sheets.forEach(sh=>{
+    if(typeof sh.size.price==='number' && sh.size.price>0) total += sh.size.price;
+    else costComplete = false;
+  });
+  return {total, costComplete};
+}
+
 function computeResult(){
   if(!state.materialKey || state.thickIndex===null || state.pieces.length===0){
     state.result = null;
@@ -711,17 +748,21 @@ function computeResult(){
     sheets.forEach(sh=>{
       totalArea += sh.size.w*sh.size.h;
       sh.placed.forEach(p=>usedArea+=p.w*p.h);
-      const key = sh.size.h+' × '+sh.size.w+'mm';
+      const key = sh.size.w+' × '+sh.size.h+'mm';
       sizeCounts[key] = (sizeCounts[key]||0)+1;
     });
-    state.result = {type:'sheet', sheets, errors, errorLetters, th, sizeCounts, wastePct: totalArea? (100*(1-usedArea/totalArea)):0};
+    const {total, costComplete} = sumSheetPrices(sheets);
+    state.result = {type:'sheet', sheets, errors, errorLetters, th, sizeCounts, wastePct: totalArea? (100*(1-usedArea/totalArea)):0, totalCost: total, costComplete};
   } else {
     const prof = m.profiles[state.thickIndex];
     const stockLen = state.plankLength;
     const {boards, errors} = packPlanks(state.pieces, stockLen, state.kerf);
     let totalLen=0, usedLen=0;
     boards.forEach(b=>{ totalLen+=stockLen; usedLen+=b.used; });
-    state.result = {type:'plank', boards, errors, prof, stockLen, wastePct: totalLen? (100*(1-usedLen/totalLen)):0};
+    const lenEntry = m.lengths.find(l=>l.length===stockLen);
+    const priced = lenEntry && typeof lenEntry.price==='number' && lenEntry.price>0;
+    const totalCost = priced ? boards.length*lenEntry.price : 0;
+    state.result = {type:'plank', boards, errors, prof, stockLen, wastePct: totalLen? (100*(1-usedLen/totalLen)):0, totalCost, costComplete: !!priced};
   }
 }
 
@@ -803,11 +844,12 @@ function mergeWithPreviousCycle(prevIdx){
   sheets.forEach(sh=>{
     totalArea += sh.size.w*sh.size.h;
     sh.placed.forEach(p=>usedArea+=p.w*p.h);
-    const key = sh.size.h+' × '+sh.size.w+'mm';
+    const key = sh.size.w+' × '+sh.size.h+'mm';
     sizeCounts[key] = (sizeCounts[key]||0)+1;
   });
   // Update previous cycle
-  prev.result = {type:'sheet', sheets, errors, errorLetters, th, sizeCounts, wastePct: totalArea? (100*(1-usedArea/totalArea)):0};
+  const merged = sumSheetPrices(sheets);
+  prev.result = {type:'sheet', sheets, errors, errorLetters, th, sizeCounts, wastePct: totalArea? (100*(1-usedArea/totalArea)):0, totalCost: merged.total, costComplete: merged.costComplete};
   prev.pieceRows = prev.pieceRows.concat(state.pieces.map(p=>({...p})));
   prev.count = sheets.length;
   prev.wastePct = prev.result.wastePct;
@@ -988,6 +1030,8 @@ function drillPrintHTML(cycle){
     const holes = d.holes.map(h=>`${h.x.toFixed(1)},${h.y.toFixed(1)}mm`).join('; ');
     return `<tr><td><b>${letterFor(cycle.pieceRows.indexOf(p))}</b></td><td>${escapeXml(p.label)}</td><td>${p.length}×${p.width}mm</td><td>${d.diameter}mm</td><td>${d.holes.length}</td><td>${holes}</td></tr>`;
   }).join('');
+  const thicknessMm = cycle.result.type==='sheet' ? cycle.result.th.mm : cycle.result.prof.mm;
+  const screwNote = getScrewRecommendation(cycle.materialMeta.name, thicknessMm);
   return `
     <div style="margin-top:10mm;">
       <h3 style="font-family:'Big Shoulders Display';text-transform:uppercase;font-size:18px;margin:0 0 8px 0;">Drilling Schedule</h3>
@@ -995,6 +1039,7 @@ function drillPrintHTML(cycle){
         <thead><tr style="border-bottom:1.5px solid #2C2620;"><th>Letter</th><th>Part</th><th>Size</th><th>Ø</th><th>Count</th><th>Coordinates (X,Y from top-left)</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
+      <p style="font-size:11px;color:#5B5347;margin-top:8px;">Fasteners: ${screwNote}</p>
     </div>
   `;
 }
@@ -1046,6 +1091,11 @@ function render(){
     if(state.cycles.length>1){
       mini += `<button class="mini-pdf-btn" style="margin-top:8px;width:100%;" onclick="printAllCycles()">↓ Download all (${state.cycles.length})</button>`;
     }
+    const grandTotal = state.cycles.reduce((s,c)=>s+(c.result.totalCost||0),0);
+    const anyPartial = state.cycles.some(c=>c.result.totalCost>0 && !c.result.costComplete);
+    if(grandTotal>0){
+      mini += `<div class="jobsheet-entry" style="border-top:1.5px solid var(--tape);padding-top:8px;"><b>TOTAL EST. COST</b><br>${CURRENCY}${grandTotal.toFixed(2)}${anyPartial?' <span style="color:var(--kerf);">(partial)</span>':''}</div>`;
+    }
   } else {
     mini = 'No materials confirmed yet.';
   }
@@ -1091,6 +1141,16 @@ function selectMaterial(key){
   state.materialKey=key; state.thickIndex=null; state.plankLength=null; state.pieces=[];
   state.step=2; render();
 }
+function setStockSizePrice(i, v){
+  const n = parseFloat(v);
+  mat().stockSizes[i].price = (isNaN(n) || n<=0) ? null : n;
+  render();
+}
+function setLengthPrice(i, v){
+  const n = parseFloat(v);
+  mat().lengths[i].price = (isNaN(n) || n<=0) ? null : n;
+  render();
+}
 
 /* ============================= CUSTOM MATERIALS ============================= */
 function startCustomMaterial(){
@@ -1129,9 +1189,10 @@ function addDraftThickness(){
 }
 function removeDraftThickness(i){ state.customDraft.thicknesses.splice(i,1); render(); }
 function addDraftStockSize(){
-  const w = parseFloat(el('stockW').value), h = parseFloat(el('stockH').value);
+  const w = parseFloat(el('stockLen').value), h = parseFloat(el('stockWid').value);
+  const priceVal = parseFloat(el('stockPrice').value);
   if(!(w>0) || !(h>0)) return;
-  if(!state.customDraft.stockSizes.some(s=>s.w===w&&s.h===h)) state.customDraft.stockSizes.push({w,h});
+  if(!state.customDraft.stockSizes.some(s=>s.w===w&&s.h===h)) state.customDraft.stockSizes.push({w,h,price:(isNaN(priceVal)||priceVal<=0)?null:priceVal});
   render();
 }
 function removeDraftStockSize(i){ state.customDraft.stockSizes.splice(i,1); render(); }
@@ -1146,9 +1207,10 @@ function addDraftProfile(){
 function removeDraftProfile(i){ state.customDraft.profiles.splice(i,1); render(); }
 function addDraftLength(){
   const len = parseFloat(el('plankLen').value);
+  const priceVal = parseFloat(el('plankLenPrice').value);
   if(!(len>0)) return;
-  if(!state.customDraft.lengths.includes(len)) state.customDraft.lengths.push(len);
-  state.customDraft.lengths.sort((a,b)=>a-b);
+  if(!state.customDraft.lengths.some(l=>l.length===len)) state.customDraft.lengths.push({length:len, price:(isNaN(priceVal)||priceVal<=0)?null:priceVal});
+  state.customDraft.lengths.sort((a,b)=>a.length-b.length);
   render();
 }
 function removeDraftLength(i){ state.customDraft.lengths.splice(i,1); render(); }
@@ -1181,9 +1243,9 @@ function stepCustomMaterialBuilder(){
   const thickOptions = `<option value="">mm…</option>${THICKNESS_PRESETS.map(t=>`<option value="${t}">${t}mm</option>`).join('')}<option value="other">Other…</option>`;
 
   const thicknessChips = d.thicknesses.map((t,i)=>`<div class="thick-pill sel" style="cursor:default;">${t.mm}mm <span class="pill-x" onclick="removeDraftThickness(${i})">✕</span></div>`).join('') || `<span class="empty-note" style="margin:0;">None added yet</span>`;
-  const stockChips = d.stockSizes.map((s,i)=>`<div class="thick-pill sel" style="cursor:default;">${s.h} × ${s.w}mm <span class="pill-x" onclick="removeDraftStockSize(${i})">✕</span></div>`).join('') || `<span class="empty-note" style="margin:0;">None added yet</span>`;
+  const stockChips = d.stockSizes.map((s,i)=>`<div class="thick-pill sel" style="cursor:default;">${s.w} × ${s.h}mm${s.price?' — '+CURRENCY+s.price:''} <span class="pill-x" onclick="removeDraftStockSize(${i})">✕</span></div>`).join('') || `<span class="empty-note" style="margin:0;">None added yet</span>`;
   const profileChips = d.profiles.map((p,i)=>`<div class="thick-pill sel" style="cursor:default;">${p.mm}mm × ${p.width}mm <span class="pill-x" onclick="removeDraftProfile(${i})">✕</span></div>`).join('') || `<span class="empty-note" style="margin:0;">None added yet</span>`;
-  const lengthChips = d.lengths.map((l,i)=>`<div class="thick-pill sel" style="cursor:default;">${(l/1000).toFixed(2).replace(/\.?0+$/,'')}m <span class="pill-x" onclick="removeDraftLength(${i})">✕</span></div>`).join('') || `<span class="empty-note" style="margin:0;">None added yet</span>`;
+  const lengthChips = d.lengths.map((l,i)=>`<div class="thick-pill sel" style="cursor:default;">${(l.length/1000).toFixed(2).replace(/\.?0+$/,'')}m${l.price?' — '+CURRENCY+l.price:''} <span class="pill-x" onclick="removeDraftLength(${i})">✕</span></div>`).join('') || `<span class="empty-note" style="margin:0;">None added yet</span>`;
 
   const sheetSection = `
     <div class="eyebrow" style="margin-top:24px;">Thicknesses stocked</div>
@@ -1196,9 +1258,11 @@ function stepCustomMaterialBuilder(){
     <div class="eyebrow" style="margin-top:24px;">Stock sheet sizes</div>
     <div class="thick-row">${stockChips}</div>
     <div class="custom-subform">
-      <input type="number" id="stockH" placeholder="width (mm)" style="width:110px;">
+      <input type="number" id="stockLen" placeholder="length (mm)" style="width:110px;">
       <span style="color:var(--graphite-soft);">×</span>
-      <input type="number" id="stockW" placeholder="length (mm)" style="width:110px;">
+      <input type="number" id="stockWid" placeholder="width (mm)" style="width:110px;">
+      <span style="color:var(--graphite-soft);">·</span>
+      ${CURRENCY}<input type="number" id="stockPrice" placeholder="price (optional)" style="width:120px;">
       <button class="btn-ghost" onclick="addDraftStockSize()">+ Add stock size</button>
     </div>
     <div class="stock-note">Add every sheet size this material comes in — the planner picks the best one per sheet automatically, same as with stocked materials.</div>
@@ -1222,6 +1286,8 @@ function stepCustomMaterialBuilder(){
     <div class="thick-row">${lengthChips}</div>
     <div class="custom-subform">
       <input type="number" id="plankLen" placeholder="length (mm)" style="width:110px;">
+      <span style="color:var(--graphite-soft);">·</span>
+      ${CURRENCY}<input type="number" id="plankLenPrice" placeholder="price (optional)" style="width:120px;">
       <button class="btn-ghost" onclick="addDraftLength()">+ Add length</button>
     </div>
     <div class="stock-note">Add every profile and stock length this material is available in. All boards bought in one cycle come from a single profile + length, chosen in Step 2.</div>`;
@@ -1274,11 +1340,17 @@ function stepThickness(){
   }
   let lenPicker='';
   if(m.type==='plank' && state.thickIndex!==null){
+    const lengthPrices = m.lengths.map((l,i)=>`<div class="kerf-row"><span>${(l.length/1000).toFixed(1)}m board:</span> ${CURRENCY}<input type="number" step="1" min="0" value="${l.price??''}" placeholder="0" onchange="setLengthPrice(${i}, this.value)"></div>`).join('');
     lenPicker = `<div style="margin-top:22px;"><div class="eyebrow" style="margin-bottom:10px;">Stock length</div>
-    <div class="thick-row">${m.lengths.map(l=>`<div class="thick-pill ${state.plankLength===l?'sel':''}" onclick="selectPlankLength(${l})">${(l/1000).toFixed(1)}m</div>`).join('')}</div>
-    <div class="stock-note">Pick the shortest standard length that comfortably covers your longest piece — less offcut per board. All boards in this cycle will be bought at this one length so the shop floor isn't juggling mixed stock.</div></div>`;
+    <div class="thick-row">${m.lengths.map(l=>`<div class="thick-pill ${state.plankLength===l.length?'sel':''}" onclick="selectPlankLength(${l.length})">${(l.length/1000).toFixed(1)}m</div>`).join('')}</div>
+    <div class="stock-note">Pick the shortest standard length that comfortably covers your longest piece — less offcut per board. All boards in this cycle will be bought at this one length so the shop floor isn't juggling mixed stock.</div>
+    <div class="eyebrow" style="margin-top:18px;margin-bottom:8px;">Board prices <span style="font-weight:400;color:var(--graphite-soft);">— optional, leave blank if unknown</span></div>
+    ${lengthPrices}
+    </div>`;
   }
-  const stockNote = m.type==='sheet' ? `<div class="stock-note">Available stock sizes for ${m.name}: <b>${m.stockSizes.map(s=>s.h+' × '+s.w+'mm').join(', ')}</b> (width × length). The planner picks the best size per sheet automatically — biggest remaining piece decides the size, then smaller pieces get nested in around it.</div>` : '';
+  const stockPrices = m.type==='sheet' ? `<div class="eyebrow" style="margin-top:18px;margin-bottom:8px;">Board prices <span style="font-weight:400;color:var(--graphite-soft);">— optional, leave blank if unknown</span></div>
+    ${m.stockSizes.map((s,i)=>`<div class="kerf-row"><span>${s.w} × ${s.h}mm board:</span> ${CURRENCY}<input type="number" step="1" min="0" value="${s.price??''}" placeholder="0" onchange="setStockSizePrice(${i}, this.value)"></div>`).join('')}` : '';
+  const stockNote = m.type==='sheet' ? `<div class="stock-note">Available stock sizes for ${m.name} (length × width): <b>${m.stockSizes.map(s=>s.w+' × '+s.h+'mm').join(', ')}</b>. The planner picks the best size per sheet automatically — biggest remaining piece decides the size, then smaller pieces get nested in around it.</div>` : '';
   const canNext = m.type==='sheet' ? state.thickIndex!==null : (state.thickIndex!==null && state.plankLength!==null);
   return `
     <div class="eyebrow">Step 2 of 4 — ${m.name}</div>
@@ -1286,8 +1358,9 @@ function stepThickness(){
     <p class="desc">${m.type==='sheet' ? 'This determines which board stock we pull from — thicker material, same footprint.' : 'Hardwood is sold as fixed board profiles (thickness × width), not sheets. Pick the profile closest to what you need — narrower pieces get ripped down from it.'}</p>
     <div class="thick-row">${pills}</div>
     ${stockNote}
+    ${stockPrices}
     ${lenPicker}
-    <div class="kerf-row">
+    <div class="kerf-row" style="margin-top:18px;">
       <span>Saw kerf:</span> <input type="number" id="kerfInput" value="${state.kerf}" step="0.5" min="1" max="6" onchange="state.kerf=parseFloat(this.value)||3; render();"> <span>mm — width of material lost to each cut</span>
     </div>
     <div class="btn-row">
@@ -1395,7 +1468,7 @@ function diagramBodyHTML(m, r, pieceRows, kerf){
           <div class="tag-num">×${g.count}</div>
           <div class="tag-info">
             <div class="tag-of">BOARDS ${from}–${to} OF ${r.sheets.length} — IDENTICAL, CUT ${g.count} TIMES</div>
-            <div class="tag-size">${sh.size.h} × ${sh.size.w} × ${r.th.mm}mm ${m.name} &nbsp;·&nbsp; ${sh.placed.length} pieces each &nbsp;·&nbsp; ${wp}% waste each</div>
+            <div class="tag-size">${sh.size.w} × ${sh.size.h} × ${r.th.mm}mm ${m.name} &nbsp;·&nbsp; ${sh.placed.length} pieces each &nbsp;·&nbsp; ${wp}% waste each</div>
           </div>
         </div>`;
       } else {
@@ -1405,7 +1478,7 @@ function diagramBodyHTML(m, r, pieceRows, kerf){
           <div class="tag-num">${running}</div>
           <div class="tag-info">
             <div class="tag-of">SHEET ${running} OF ${r.sheets.length}</div>
-            <div class="tag-size">${sh.size.h} × ${sh.size.w} × ${r.th.mm}mm ${m.name} &nbsp;·&nbsp; ${sh.placed.length} pieces &nbsp;·&nbsp; ${wp}% waste</div>
+            <div class="tag-size">${sh.size.w} × ${sh.size.h} × ${r.th.mm}mm ${m.name} &nbsp;·&nbsp; ${sh.placed.length} pieces &nbsp;·&nbsp; ${wp}% waste</div>
           </div>
         </div>`;
       }
@@ -1466,6 +1539,7 @@ function diagramBodyHTML(m, r, pieceRows, kerf){
       ${breakdownLines}
       <div class="line"><span>Overall waste</span><b>${r.wastePct.toFixed(1)}%</b></div>
       <div class="line"><span>Kerf allowance</span><b>${kerf}mm per cut</b></div>
+      <div class="line"><span>Estimated material cost</span><b>${r.totalCost>0 ? CURRENCY+r.totalCost.toFixed(2)+(r.costComplete?'':' (partial — some boards unpriced)') : 'set board prices in Step 2'}</b></div>
     </div>
   `;
 }
@@ -1521,6 +1595,8 @@ function renderDrilling(){
   const piece = cycle.pieceRows[state.drillPieceIndex];
   const rules = getDrillRules(cycle.materialMeta.name, state.drillDiameter);
   const rep = findRepeatablePattern();
+  const thicknessMm = cycle.result.type==='sheet' ? cycle.result.th.mm : cycle.result.prof.mm;
+  const screwNote = getScrewRecommendation(cycle.materialMeta.name, thicknessMm);
 
   // Build piece list sidebar
   const pieceButtons = cycle.pieceRows.map((p,i)=>{
@@ -1624,6 +1700,8 @@ function renderDrilling(){
           </div>
 
           ${safeNote}
+
+          <div class="stock-note" style="margin-top:10px;">🔩 ${screwNote}</div>
 
           <div class="drill-nav">
             <button class="btn-ghost" ${state.drillPieceIndex>0?'':'disabled'} onclick="drillPrev()">← Previous piece</button>
